@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title><!-- APP_TITLE --></title>
+  <title>Can You Spot the Phish?</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- Fonts (Work Sans) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -24,22 +24,41 @@
 
   <!-- Template-specific components (layout, utilities, temporary components) -->
   <link rel="stylesheet" href="./bespoke-template.css" />
-  <!-- APP_SPECIFIC_CSS -->
+  <link rel="stylesheet" href="./app.css" />
 </head>
 <body class="bespoke">
   <!-- Navigation Header -->
   <header class="header">
-    <h1 class="heading-small">APP NAME</h1>
-    <!-- APP_SPECIFIC_HEADER_CONTENT -->
+    <div class="row">
+      <h1 class="heading-small">Can You Spot the Phish?</h1>
+      <span class="tag" id="theme-indicator">Training Mode</span>
+    </div>
     <div class="spacer"></div>
     <button id="btn-help" class="button button-text">Help</button>
   </header>
 
-  <!-- Main Application Content -->
-  <!-- APP_SPECIFIC_MAIN_CONTENT -->
+  <main class="main-layout">
+    <aside class="sidebar">
+      <section class="box card" id="intro-panel">
+        <h2 class="heading-xsmall">Mission Brief</h2>
+        <p>Review each scenario, decide if it is phishing or legitimate, and learn to spot the red flags.</p>
+      </section>
+      <section class="box card" id="progress-panel">
+        <div class="row-between">
+          <h2 class="heading-xsmall">Scenario Progress</h2>
+          <span id="progress-count" class="body-small">0 / 0</span>
+        </div>
+        <ul id="scenario-list" class="scenario-list"></ul>
+      </section>
+    </aside>
+
+    <section class="content-area">
+      <div id="app-root" class="app-root"></div>
+    </section>
+  </main>
 
   <!-- Core Scripts -->
+  <script src="./vendor/js-yaml.min.js"></script>
   <script type="module" src="./app.js"></script>
-  <!-- APP_SPECIFIC_SCRIPTS -->
 </body>
 </html>

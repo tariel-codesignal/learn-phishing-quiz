@@ -1,0 +1,105 @@
+- id: email-credentials-reset
+  interface: email
+  sender_name: Alex @ IT Support
+  sender_email: service-security@corp-it-support.com
+  subject: Immediate credential reset required
+  timestamp: Mon, 22 Apr 2024 at 8:14 AM
+  preview_badge: External
+  body: |
+    Hi there,
+
+    Our monitoring flagged suspicious activity tied to your account this morning. Your mailbox will be locked if you do not confirm ownership within the next 30 minutes. Use the secure portal below to stop the lockout process.
+
+    https://corp-auth-reinstate.com/login
+
+    Stay vigilant,
+    IT Support Desk
+  is_phishing: true
+  red_flags:
+    - Sender address slightly mimics IT but uses an external domain.
+    - Urgent lockout timer plus vague "suspicious activity" message.
+    - Link goes to a domain that does not belong to the company.
+  explanation: |
+    Real security notifications use the official `it.company.com` domain and never threaten deactivation within minutes. Always check the actual link destination before clicking.
+
+- id: email-quarterly-update
+  interface: email
+  sender_name: Priya Raman
+  sender_email: priya.raman@company.com
+  subject: Q2 product roadmap notes
+  timestamp: Thu, 9 May 2024 at 4:42 PM
+  preview_badge: Internal
+  body: |
+    Hi team,
+
+    Thanks for joining the roadmap sync earlier today. Here are my notes plus the finalized milestone spreadsheet. Let me know if anything looks off before I send the summary to leadership.
+
+    Drive folder: https://drive.google.com/file/d/official-roadmap
+
+    - Priya
+  is_phishing: false
+  red_flags:
+    - Link uses the official Google Drive domain shared internally.
+    - Tone is consistent with an internal update and references a recent meeting.
+  explanation: |
+    This is a legitimate follow-up from your product lead with expected context and an authenticated Google Drive link.
+
+- id: sms-package-fee
+  interface: sms
+  sender_name: USPS Notice
+  body: |
+    USPS: Package held. Pay the $1.97 redelivery fee to release today https://usps-clearance-support.com
+  timestamp: 10:02 AM
+  is_phishing: true
+  red_flags:
+    - USPS does not text from random numbers demanding small fees.
+    - Suspicious domain that misuses the USPS brand.
+    - The typo in "redelivery" and urgency are common scam tactics.
+  explanation: |
+    Delivery carriers do not request payments via unsolicited texts. Visit the official USPS site or app if you expect a parcel.
+
+- id: sms-calendar-reminder
+  interface: sms
+  sender_name: HR Bot
+  body: |
+    Friendly reminder: Your annual benefits review with Dana is tomorrow at 2:30 PM. Reply C to confirm.
+  timestamp: 3:47 PM
+  is_phishing: false
+  red_flags:
+    - Message references a meeting you scheduled with HR and uses internal phrasing.
+    - Does not ask for sensitive data or external links.
+  explanation: |
+    This is a standard internal reminder that aligns with your calendar entry. Always double-check, but nothing indicates phishing here.
+
+- id: slack-expense-warning
+  interface: slack
+  channel: #finance-alerts
+  sender_name: Finance Automation
+  sender_handle: finance-bot
+  avatar_initials: FA
+  timestamp: 11:18 AM
+  body: |
+    WARNING: Expense policy update. We detected unmatched expenses in your card feed. Download the CSV here and respond within 1 hour -> https://slack-files-secure.s3-us-west-2.amazonaws-notreally.com
+  is_phishing: true
+  red_flags:
+    - External file link hosted on a spoofed AWS bucket.
+    - Unrealistic one-hour deadline and fear-based emoji.
+    - Finance alerts normally come from Workday, not a generic bot.
+  explanation: |
+    Attackers often drop malicious files via spoofed links in Slack. Confirm alerts in Workday before downloading anything.
+
+- id: slack-incident-report
+  interface: slack
+  channel: Direct message with SecOps
+  sender_name: Nina Lopez
+  sender_handle: nina.lopez
+  avatar_initials: NL
+  timestamp: 5:06 PM
+  body: |
+    Hey! Appreciate you flagging the login weirdness earlier. We captured the logs and no action is needed from you now. I'll share the retro doc tomorrow.
+  is_phishing: false
+  red_flags:
+    - Message references an ongoing thread with the known SecOps lead.
+    - No links or sensitive data requests, just status context.
+  explanation: |
+    This is a legitimate follow-up keeping you posted. Actual SecOps contacts use their verified accounts and keep requests specific.
