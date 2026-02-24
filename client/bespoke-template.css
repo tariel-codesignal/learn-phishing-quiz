@@ -36,21 +36,15 @@
 
 /* Main Layout */
 .bespoke .main-layout {
-  display: grid;
-  grid-template-columns: 300px 1fr;
-  height: calc(100% - 42px);
-}
-
-.bespoke .sidebar {
-  padding: var(--UI-Spacing-spacing-s);
-  overflow: auto;
-  border-right: 1px solid var(--Colors-Stroke-Default);
-  background: var(--Colors-Backgrounds-Main-Default);
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: calc(100vh - 64px);
 }
 
 .bespoke .content-area {
   width: 100%;
-  height: 100%;
+  padding: var(--UI-Spacing-spacing-xl) var(--UI-Spacing-spacing-mxl);
 }
 
 /* ===== UTILITY CLASSES ===== */
@@ -184,14 +178,7 @@
 
 /* Responsive Design */
 @media (max-width: 768px) {
-  .bespoke .main-layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-  }
-
-  .bespoke .sidebar {
-    border-right: none;
-    border-bottom: 1px solid var(--Colors-Stroke-Default);
+  .bespoke .content-area {
+    padding: var(--UI-Spacing-spacing-l) var(--UI-Spacing-spacing-m);
   }
 }
-

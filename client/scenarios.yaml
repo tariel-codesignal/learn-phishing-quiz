@@ -6,9 +6,9 @@
   timestamp: Mon, 22 Apr 2024 at 8:14 AM
   preview_badge: External
   body: |
-    Hi there,
+    Hi {{name}},
 
-    Our monitoring flagged suspicious activity tied to your account this morning. Your mailbox will be locked if you do not confirm ownership within the next 30 minutes. Use the secure portal below to stop the lockout process.
+    Our monitoring flagged suspicious activity tied to {{email}} this morning. Your mailbox will be locked if you do not confirm ownership within the next 30 minutes. Use the secure portal below to stop the lockout process.
 
     https://corp-auth-reinstate.com/login
 
@@ -30,9 +30,9 @@
   timestamp: Thu, 9 May 2024 at 4:42 PM
   preview_badge: Internal
   body: |
-    Hi team,
+    Hi {{name}},
 
-    Thanks for joining the roadmap sync earlier today. Here are my notes plus the finalized milestone spreadsheet. Let me know if anything looks off before I send the summary to leadership.
+    Thanks for jumping on the roadmap sync earlier today. Sharing my notes plus the finalized milestone spreadsheet straight to {{email}} so you can annotate before I recap to leadership.
 
     Drive folder: https://drive.google.com/file/d/official-roadmap
 
@@ -48,7 +48,7 @@
   interface: sms
   sender_name: USPS Notice
   body: |
-    USPS: Package held. Pay the $1.97 redelivery fee to release today https://usps-clearance-support.com
+    Hi {{name}}, USPS: Package held. Pay the $1.97 redelivery fee to release today https://usps-clearance-support.com
   timestamp: 10:02 AM
   is_phishing: true
   red_flags:
@@ -62,7 +62,7 @@
   interface: sms
   sender_name: HR Bot
   body: |
-    Friendly reminder: Your annual benefits review with Dana is tomorrow at 2:30 PM. Reply C to confirm.
+    Hey {{name}}, friendly reminder: Your annual benefits review with Dana is tomorrow at 2:30 PM. Reply C to confirm.
   timestamp: 3:47 PM
   is_phishing: false
   red_flags:
@@ -79,7 +79,7 @@
   avatar_initials: FA
   timestamp: 11:18 AM
   body: |
-    WARNING: Expense policy update. We detected unmatched expenses in your card feed. Download the CSV here and respond within 1 hour -> https://slack-files-secure.s3-us-west-2.amazonaws-notreally.com
+    WARNING: @{{name}}, expense policy update. We detected unmatched expenses in your card feed. Download the CSV here and respond within 1 hour -> https://slack-files-secure.s3-us-west-2.amazonaws-notreally.com
   is_phishing: true
   red_flags:
     - External file link hosted on a spoofed AWS bucket.
@@ -96,7 +96,7 @@
   avatar_initials: NL
   timestamp: 5:06 PM
   body: |
-    Hey! Appreciate you flagging the login weirdness earlier. We captured the logs and no action is needed from you now. I'll share the retro doc tomorrow.
+    Hey {{name}}! Appreciate you flagging the login weirdness earlier. We captured the logs tied to {{email}} and no action is needed from you now. I'll share the retro doc tomorrow.
   is_phishing: false
   red_flags:
     - Message references an ongoing thread with the known SecOps lead.

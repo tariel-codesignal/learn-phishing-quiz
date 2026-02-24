@@ -1,20 +1,32 @@
 /* App-specific styles for Can You Spot the Phish? */
 
 .app-root {
-  padding: var(--UI-Spacing-spacing-l);
-  height: 100%;
-  overflow: auto;
+  padding: var(--UI-Spacing-spacing-xl) 0 var(--UI-Spacing-spacing-xxl);
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: calc(100vh - 120px);
+}
+
+.app-root[data-stage="welcome"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8f9fb;
+  border-radius: 32px;
+  padding: clamp(2rem, 5vw, 4rem);
 }
 
 .app-card {
   background: var(--Colors-Backgrounds-Main-Default);
   border: 1px solid var(--Colors-Stroke-Default);
-  border-radius: var(--UI-Radius-radius-m);
-  padding: var(--UI-Spacing-spacing-ml);
-  box-shadow: var(--Colors-Shadow-Card, 0 12px 24px rgba(15, 15, 36, 0.08));
+  border-radius: var(--UI-Radius-radius-l);
+  padding: var(--UI-Spacing-spacing-xl);
+  box-shadow: var(--Colors-Shadow-Card, 0 24px 48px rgba(3, 8, 20, 0.25));
   display: flex;
   flex-direction: column;
   gap: var(--UI-Spacing-spacing-l);
+  width: 100%;
 }
 
 .app-card h2,
@@ -74,7 +86,90 @@
 }
 
 .welcome-hero {
-  max-width: 640px;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  text-align: center;
+  gap: var(--UI-Spacing-spacing-xl);
+  background: #fff;
+  border: 1px solid #e0e3eb;
+  box-shadow: 0 18px 40px rgba(32, 33, 36, 0.12);
+  padding: clamp(2rem, 4vw, 3rem) clamp(2rem, 6vw, 4rem);
+}
+
+.welcome-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--UI-Spacing-spacing-s);
+  align-items: center;
+}
+
+.welcome-headline {
+  margin: 0;
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  font-weight: 600;
+  color: #202124;
+}
+
+.welcome-subtext {
+  margin: 0;
+  color: #5f6368;
+  font-size: 1rem;
+}
+
+.landing-form {
+  width: 100%;
+  max-width: 340px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--UI-Spacing-spacing-m);
+  align-items: stretch;
+}
+
+.landing-input {
+  border: 1px solid #dadce0;
+  border-radius: 999px;
+  padding: 0.85rem 1.25rem;
+  font-size: 1rem;
+  color: #202124;
+  background: #fff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.landing-input::placeholder {
+  color: #9aa0a6;
+}
+
+.landing-input:focus {
+  outline: none;
+  border-color: #4285f4;
+  box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.2);
+}
+
+.landing-hint {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #5f6368;
+}
+
+.landing-cta {
+  background: #4285f4;
+  border-color: #4285f4;
+  color: #fff;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 0.9rem 1.25rem;
+  width: 100%;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.landing-cta:hover,
+.landing-cta:focus-visible {
+  background: #3367d6;
+  border-color: #3367d6;
+  box-shadow: 0 4px 14px rgba(66, 133, 244, 0.35);
+  color: #fff;
 }
 
 .red-flags-list {
@@ -97,6 +192,9 @@
   border-radius: var(--UI-Radius-radius-m);
   background: var(--Colors-Backgrounds-Main-Default);
   overflow: hidden;
+  max-width: 780px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .email-shell {
@@ -115,6 +213,11 @@
   display: flex;
   gap: var(--UI-Spacing-spacing-s);
   align-items: center;
+}
+
+.email-recipient {
+  margin-top: var(--UI-Spacing-spacing-xs);
+  color: var(--Colors-Text-Body-Subtle);
 }
 
 .email-body {
@@ -201,8 +304,43 @@
   background: var(--Colors-Backgrounds-Subtle);
 }
 
+.quiz-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--UI-Spacing-spacing-xxs);
+}
+
+.quiz-meta p {
+  margin: 0;
+  color: var(--Colors-Text-Body-Subtle);
+}
+
+.scenario-stage {
+  font-weight: 600;
+  color: var(--Colors-Text-Body-Strongest);
+}
+
+.summary-card .scenario-list {
+  max-height: 320px;
+  overflow: auto;
+}
+
+@media (max-width: 1024px) {
+  .welcome-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-form {
+    padding: var(--UI-Spacing-spacing-l);
+  }
+}
+
 @media (max-width: 900px) {
   .app-card {
     padding: var(--UI-Spacing-spacing-m);
+  }
+
+  .app-root {
+    padding: var(--UI-Spacing-spacing-l) 0 var(--UI-Spacing-spacing-xl);
   }
 }

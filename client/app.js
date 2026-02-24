@@ -11,13 +11,15 @@ const state = {
   stage: 'loading',
   lastAnswer: null,
   errorMessage: '',
-  hasLoggedSummary: false
+  hasLoggedSummary: false,
+  profile: {
+    name: '',
+    email: ''
+  }
 };
 
 const selectors = {
   appRoot: () => document.getElementById('app-root'),
-  scenarioList: () => document.getElementById('scenario-list'),
-  progressCount: () => document.getElementById('progress-count'),
   headerIndicator: () => document.getElementById('theme-indicator')
 };
 
@@ -32,6 +34,36 @@ function escapeHTML(text = '') {
 
 function formatMultiline(text = '') {
   return escapeHTML(text).replace(/\n/g, '<br />');
+}
+
+function getProfileValue(key, fallback) {
+  const value = (state.profile[key] || '').trim();
+  return value || fallback;
+}
+
+function personalizeText(text = '') {
+  if (typeof text !== 'string') {
+    return text;
+  }
+  const replacements = {
+    name: getProfileValue('name', 'you'),
+    email: getProfileValue('email', 'you@company.com')
+  };
+  return text
+    .replace(/{{\s*name\s*}}/gi, replacements.name)
+    .replace(/{{\s*email\s*}}/gi, replacements.email);
+}
+
+function personalizeScenario(scenario = {}) {
+  const personalized = { ...scenario };
+  Object.entries(personalized).forEach(([key, value]) => {
+    if (typeof value === 'string') {
+      personalized[key] = personalizeText(value);
+    } else if (Array.isArray(value)) {
+      personalized[key] = value.map(item => (typeof item === 'string' ? personalizeText(item) : item));
+    }
+  });
+  return personalized;
 }
 
 async function loadScenarios() {
@@ -70,6 +102,10 @@ function updateHeaderStatus() {
     indicator.textContent = 'Loading scenarios...';
     return;
   }
+  if (state.stage === 'welcome') {
+    indicator.textContent = 'Briefing: enter your info to begin';
+    return;
+  }
   if (state.stage === 'summary') {
     indicator.textContent = 'Training complete';
     return;
@@ -89,42 +125,6 @@ function getScenarioTitle(scenario) {
     return scenario.channel || `Slack from ${scenario.sender_name || 'Teammate'}`;
   }
   return 'Scenario';
-}
-
-function updateSidebarProgress() {
-  const list = selectors.scenarioList();
-  const progressCount = selectors.progressCount();
-  if (progressCount) {
-    const answered = state.answers.filter(Boolean).length;
-    progressCount.textContent = `${answered} / ${state.scenarios.length || 0}`;
-  }
-  if (!list) return;
-
-  if (!state.scenarios.length) {
-    list.innerHTML = '<li class="scenario-item">Loading...</li>';
-    return;
-  }
-
-  const items = state.scenarios
-    .map((scenario, index) => {
-      const answer = state.answers[index];
-      let statusLabel = 'Pending';
-      let extraClass = '';
-      if (answer) {
-        statusLabel = answer.isCorrect ? 'Correct' : 'Review';
-        extraClass = `completed ${answer.isCorrect ? 'correct' : 'incorrect'}`;
-      } else if (index === state.currentIndex && (state.stage === 'question' || state.stage === 'result')) {
-        statusLabel = 'In progress';
-        extraClass = 'active';
-      }
-      return `<li class="scenario-item ${extraClass}">
-        <span>${index + 1}. ${escapeHTML(getScenarioTitle(scenario))}</span>
-        <span class="status-pill">${statusLabel}</span>
-      </li>`;
-    })
-    .join('');
-
-  list.innerHTML = items;
 }
 
 function renderLoadingCard() {
@@ -149,34 +149,57 @@ function renderErrorCard(message) {
 }
 
 function renderWelcomeCard() {
+  const scenarioCount = state.scenarios.length || 0;
+  const scenarioLabel = scenarioCount ? `${scenarioCount} quick scenarios` : 'a quick set of scenarios';
+  const nameValue = escapeHTML(state.profile.name || '');
+  const emailValue = escapeHTML(state.profile.email || '');
   return `
     <div class="app-card welcome-hero">
-      <h2>Welcome to Can You Spot the Phish?</h2>
-      <p>This simulator drops you into realistic inbox, SMS, and Slack views. For each message decide whether it is phishing or legitimate, then review the red flags that reveal the truth.</p>
-      <ul>
-        <li>6 scenarios | 2 per channel</li>
-        <li>Serious tone, realistic stakes</li>
-        <li>Instant coaching after every decision</li>
-      </ul>
-      <div class="app-actions">
-        <button class="button button-primary" id="start-training">Begin Training</button>
+      <div class="welcome-copy">
+        <h2 class="welcome-headline">Can you spot a phishing attack?</h2>
+        <p class="welcome-subtext">Phishing is the #1 cause of data breaches. Test yourself in ${scenarioLabel}.</p>
       </div>
+      <form id="quiz-intro-form" class="landing-form" novalidate>
+        <input
+          type="text"
+          id="participant-name"
+          name="participant-name"
+          class="landing-input"
+          placeholder="First name"
+          aria-label="First name"
+          value="${nameValue}"
+        />
+        <input
+          type="text"
+          id="participant-email"
+          name="participant-email"
+          class="landing-input"
+          placeholder="Email"
+          inputmode="email"
+          aria-label="Email"
+          value="${emailValue}"
+        />
+        <p class="landing-hint">We only use this to personalize each message.</p>
+        <button class="button landing-cta" type="submit">Take the Quiz</button>
+      </form>
     </div>
   `;
 }
 
 function renderScenarioCard(scenario) {
+  const personalizedScenario = personalizeScenario(scenario);
   const { correct } = getScore();
   return `
     <div class="app-card">
       <div class="row-between">
-        <div>
-          <p class="body-small">${scenario.interface.toUpperCase()} | Scenario ${state.currentIndex + 1} of ${state.scenarios.length}</p>
-          <h2>${escapeHTML(getScenarioTitle(scenario))}</h2>
+        <div class="quiz-meta">
+          <p class="body-small scenario-stage">${personalizedScenario.interface.toUpperCase()} SIMULATION</p>
+          <h2>${escapeHTML(getScenarioTitle(personalizedScenario))}</h2>
+          <p>Scenario ${state.currentIndex + 1} of ${state.scenarios.length}</p>
         </div>
         <span class="score-pill">Score: ${correct}/${state.scenarios.length}</span>
       </div>
-      ${renderInterfaceShell(scenario)}
+      ${renderInterfaceShell(personalizedScenario)}
       <p>Is this message a phishing attempt or a legitimate communication?</p>
       <div class="app-actions">
         <button class="button button-danger" id="btn-phishing">Phishing</button>
@@ -191,6 +214,7 @@ function renderResultCard(scenario) {
   if (!lastAnswer) {
     return '';
   }
+  const personalizedScenario = personalizeScenario(scenario);
   const correctLabel = scenario.is_phishing ? 'Phishing' : 'Legit';
   const userLabel = lastAnswer.userAnswer === 'phishing' ? 'Phishing' : 'Legit';
   const heading = lastAnswer.isCorrect ? 'Correct - great catch!' : 'Not quite.';
@@ -206,14 +230,14 @@ function renderResultCard(scenario) {
         <p>${description}</p>
         <p><strong>Your answer:</strong> ${userLabel} | <strong>Correct answer:</strong> ${correctLabel}</p>
       </div>
-      ${renderInterfaceShell(scenario)}
+      ${renderInterfaceShell(personalizedScenario)}
       <div>
         <h3>Red Flags</h3>
-        ${renderRedFlags(scenario.red_flags)}
+        ${renderRedFlags(personalizedScenario.red_flags)}
       </div>
       <div>
         <h3>Explanation</h3>
-        <p>${escapeHTML(scenario.explanation || '')}</p>
+        <p>${escapeHTML(personalizedScenario.explanation || '')}</p>
       </div>
       <div class="app-actions">
         <button class="button button-secondary" id="review-again">Review Scenario Again</button>
@@ -229,19 +253,20 @@ function renderSummaryCard() {
   const percentage = total ? Math.round((correct / total) * 100) : 0;
   const resultsList = state.scenarios
     .map((scenario, index) => {
+      const personalized = personalizeScenario(scenario);
       const answer = state.answers[index];
       const isCorrect = Boolean(answer?.isCorrect);
       const statusClass = isCorrect ? 'correct' : 'incorrect';
       const label = isCorrect ? 'Correct' : 'Phishing cues missed';
       return `<li class="scenario-item completed ${statusClass}">
-        <span>${index + 1}. ${escapeHTML(getScenarioTitle(scenario))}</span>
+        <span>${index + 1}. ${escapeHTML(getScenarioTitle(personalized))}</span>
         <span class="status-pill">${label}</span>
       </li>`;
     })
     .join('');
 
   return `
-    <div class="app-card">
+    <div class="app-card summary-card">
       <h2>Training complete</h2>
       <p>You correctly identified <strong>${correct}</strong> out of <strong>${total}</strong> scenarios (${percentage}%).</p>
       <p>Incorrect: ${incorrect}</p>
@@ -278,6 +303,7 @@ function renderInterfaceShell(scenario) {
 }
 
 function renderEmailShell(scenario) {
+  const recipientEmail = escapeHTML(getProfileValue('email', 'you@company.com'));
   return `
     <div class="scenario-view email-shell">
       <div class="email-toolbar">
@@ -294,6 +320,7 @@ function renderEmailShell(scenario) {
           </div>
           ${scenario.preview_badge ? `<span class="preview-badge">${escapeHTML(scenario.preview_badge)}</span>` : ''}
         </div>
+        <div class="email-recipient body-small">To: ${recipientEmail}</div>
       </div>
       <div class="email-body">${formatMultiline(scenario.body || '')}</div>
     </div>
@@ -339,6 +366,7 @@ function renderApp() {
   if (!root) {
     return;
   }
+  root.setAttribute('data-stage', state.stage);
   let markup = '';
   switch (state.stage) {
     case 'loading':
@@ -364,7 +392,6 @@ function renderApp() {
   }
   root.innerHTML = markup;
   attachEventHandlers();
-  updateSidebarProgress();
   updateHeaderStatus();
   if (state.stage === 'summary') {
     logQuizResult();
@@ -372,9 +399,13 @@ function renderApp() {
 }
 
 function attachEventHandlers() {
-  const startBtn = document.getElementById('start-training');
-  if (startBtn) {
-    startBtn.addEventListener('click', () => {
+  const introForm = document.getElementById('quiz-intro-form');
+  if (introForm) {
+    introForm.addEventListener('submit', event => {
+      event.preventDefault();
+      const formData = new FormData(introForm);
+      state.profile.name = (formData.get('participant-name') || '').toString().trim();
+      state.profile.email = (formData.get('participant-email') || '').toString().trim();
       state.stage = 'question';
       state.currentIndex = 0;
       renderApp();
