@@ -5,22 +5,29 @@
   subject: Immediate credential reset required
   timestamp: Mon, 22 Apr 2024 at 8:14 AM
   preview_badge: External
+  reply_to: harvester@suspicious-reset.ru
+  mailed_by: bulk-mail.xyz
+  signed_by: bulk-mail.xyz
   body: |
     Hi {{name}},
 
-    Our monitoring flagged suspicious activity tied to {{email}} this morning. Your mailbox will be locked if you do not confirm ownership within the next 30 minutes. Use the secure portal below to stop the lockout process.
+    Our monitoring flagged suspicious OAuth attempts tied to {{email}}. Your mailbox will be locked if you do not confirm ownership within the next 30 minutes.
 
-    https://corp-auth-reinstate.com/login
+    Review the action via **Security Center**: [security.google.com/settings/security/alerts](https://corp-auth-reinstate.com/login?email={{email}})
+
+    If the above alert looks unfamiliar, open the "Account Recovery" handoff to keep _access_ active: [Reset access portal](https://credential-lock-team.info/restore)
 
     Stay vigilant,
     IT Support Desk
   is_phishing: true
   red_flags:
     - Sender address slightly mimics IT but uses an external domain.
+    - Reply-to address routes to harvester@suspicious-reset.ru.
+    - Link text says security.google.com but actually goes to a fake portal.
     - Urgent lockout timer plus vague "suspicious activity" message.
-    - Link goes to a domain that does not belong to the company.
+    - Mailed-by header exposes bulk-mail.xyz instead of the corporate domain.
   explanation: |
-    Real security notifications use the official `it.company.com` domain and never threaten deactivation within minutes. Always check the actual link destination before clicking.
+    Real security notifications use the official `it.company.com` domain and never threaten deactivation within minutes. The "reply-to" and "mailed-by" headers plus the real link target all expose the impersonation.
 
 - id: email-quarterly-update
   interface: email
@@ -29,12 +36,22 @@
   subject: Q2 product roadmap notes
   timestamp: Thu, 9 May 2024 at 4:42 PM
   preview_badge: Internal
+  mailed_by: mail.company.com
+  signed_by: company.com
+  doc_embed:
+    type: sheets
+    title: Q2 Milestones - Product Org
+    url: https://docs.google.com/spreadsheets/d/official-roadmap
   body: |
     Hi {{name}},
 
     Thanks for jumping on the roadmap sync earlier today. Sharing my notes plus the finalized milestone spreadsheet straight to {{email}} so you can annotate before I recap to leadership.
 
-    Drive folder: https://drive.google.com/file/d/official-roadmap
+    **Action items:**
+    - Tag any blockers inside the sheet.
+    - Drop comments on the "Northstar metrics" tab.
+
+    Drive folder: [drive.google.com/file/d/official-roadmap](https://drive.google.com/file/d/official-roadmap)
 
     - Priya
   is_phishing: false

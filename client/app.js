@@ -54,16 +54,109 @@ function personalizeText(text = '') {
     .replace(/{{\s*email\s*}}/gi, replacements.email);
 }
 
-function personalizeScenario(scenario = {}) {
-  const personalized = { ...scenario };
-  Object.entries(personalized).forEach(([key, value]) => {
-    if (typeof value === 'string') {
-      personalized[key] = personalizeText(value);
-    } else if (Array.isArray(value)) {
-      personalized[key] = value.map(item => (typeof item === 'string' ? personalizeText(item) : item));
-    }
-  });
-  return personalized;
+function personalizeScenario(value) {
+  if (typeof value === 'string') {
+    return personalizeText(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(item => personalizeScenario(item));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, val]) => [key, personalizeScenario(val)]));
+  }
+  return value;
+}
+
+function escapeAttribute(value = '') {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function getAvatarColor(seed = '') {
+  const palette = ['#1a73e8', '#e91e63', '#9c27b0', '#0097a7', '#388e3c', '#f57c00'];
+  const normalized = seed || 'sender';
+  const code = Array.from(normalized).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return palette[code % palette.length];
+}
+
+function formatEmailBody(text = '') {
+  if (!text) {
+    return '';
+  }
+  const blocks = text.split(/\n{2,}/).map(block => block.trim()).filter(Boolean);
+  const transformInline = block => {
+    let html = escapeHTML(block);
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    html = html.replace(/_(.+?)_/g, '<em>$1</em>');
+    html = html.replace(/\[(.+?)\]\((.+?)\)/g, (_match, label, href) => {
+      const safeHref = escapeAttribute(href.trim());
+      return `<a href="${safeHref}" class="gmail-link">${label}</a>`;
+    });
+    return html.replace(/\n/g, '<br />');
+  };
+  return blocks.map(block => `<p>${transformInline(block)}</p>`).join('');
+}
+
+function renderDocEmbed(docEmbed = {}) {
+  if (!docEmbed.title || !docEmbed.url) {
+    return '';
+  }
+  const type = (docEmbed.type || 'docs').toLowerCase();
+  const iconLabel = type === 'sheets' ? 'Sheets' : 'Docs';
+  const iconClass = type === 'sheets' ? 'sheets' : 'docs';
+  const docTitle = escapeHTML(docEmbed.title);
+  const docUrl = escapeAttribute(docEmbed.url);
+  return `
+    <div class="gmail-doc-card">
+      <div class="gmail-doc-icon ${iconClass}" aria-hidden="true"></div>
+      <div class="gmail-doc-copy">
+        <div class="gmail-doc-title">${docTitle}</div>
+        <a href="${docUrl}" class="gmail-doc-link">Open in ${iconLabel}</a>
+      </div>
+    </div>
+  `;
+}
+
+const gmailToolbarIcons = [
+  { type: 'back', label: 'Back to inbox' },
+  { type: 'archive', label: 'Archive' },
+  { type: 'delete', label: 'Delete' },
+  { type: 'spam', label: 'Report spam' },
+  { type: 'move', label: 'Move to' },
+  { type: 'label', label: 'Labels' },
+  { type: 'more', label: 'More options' }
+];
+
+function getToolbarIconSvg(type) {
+  const svgAttrs = 'class="gmail-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"';
+  switch (type) {
+    case 'back':
+      return `<svg ${svgAttrs}><polyline points="15 6 9 12 15 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>`;
+    case 'archive':
+      return `<svg ${svgAttrs}><path d="M5 4h14l2 4H3l2-4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path><rect x="4" y="8" width="16" height="11" rx="1" ry="1" fill="none" stroke="currentColor" stroke-width="1.6"></rect><line x1="9" y1="13" x2="15" y2="13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></line></svg>`;
+    case 'delete':
+      return `<svg ${svgAttrs}><rect x="7" y="8" width="10" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"></rect><line x1="5" y1="6" x2="19" y2="6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></line><line x1="10" y1="11" x2="10" y2="18" stroke="currentColor" stroke-width="1.6"></line><line x1="14" y1="11" x2="14" y2="18" stroke="currentColor" stroke-width="1.6"></line><line x1="9" y1="4" x2="15" y2="4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></line></svg>`;
+    case 'spam':
+      return `<svg ${svgAttrs}><polygon points="12 3 21 8 21 16 12 21 3 16 3 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></polygon><line x1="12" y1="9" x2="12" y2="14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></line><circle cx="12" cy="17" r="0.9" fill="currentColor"></circle></svg>`;
+    case 'move':
+      return `<svg ${svgAttrs}><path d="M4 7h6l2 2h8a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path><polyline points="13 12 16 15 19 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>`;
+    case 'label':
+      return `<svg ${svgAttrs}><path d="M4 7h10l6 5-6 5H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path><circle cx="7" cy="12" r="1.4" fill="currentColor"></circle></svg>`;
+    case 'more':
+      return `<svg ${svgAttrs}><circle cx="12" cy="5" r="1.4" fill="currentColor"></circle><circle cx="12" cy="12" r="1.4" fill="currentColor"></circle><circle cx="12" cy="19" r="1.4" fill="currentColor"></circle></svg>`;
+    case 'reply':
+      return `<svg ${svgAttrs}><polyline points="13 7 8 12 13 17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></polyline><path d="M8 12h8a4 4 0 0 1 4 4v0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>`;
+    case 'kebab':
+      return `<svg ${svgAttrs}><circle cx="12" cy="6" r="1.2" fill="currentColor"></circle><circle cx="12" cy="12" r="1.2" fill="currentColor"></circle><circle cx="12" cy="18" r="1.2" fill="currentColor"></circle></svg>`;
+    default:
+      return '';
+  }
 }
 
 async function loadScenarios() {
@@ -303,26 +396,87 @@ function renderInterfaceShell(scenario) {
 }
 
 function renderEmailShell(scenario) {
-  const recipientEmail = escapeHTML(getProfileValue('email', 'you@company.com'));
+  const recipientEmail = getProfileValue('email', 'you@company.com');
+  const recipientLabel = recipientEmail === 'you@company.com' ? 'me' : recipientEmail;
+  const avatarSeed = scenario.sender_name || scenario.sender_email || '?';
+  const avatarInitial = avatarSeed.trim().charAt(0).toUpperCase() || '?';
+  const avatarColor = getAvatarColor(avatarSeed);
+  const detailRows = [
+    {
+      label: 'from',
+      value: `${scenario.sender_name || 'Unknown sender'} <${scenario.sender_email || 'unknown@domain.com'}>`
+    },
+    { label: 'to', value: recipientEmail },
+    { label: 'date', value: scenario.timestamp || '' }
+  ];
+  if (scenario.reply_to) {
+    detailRows.push({ label: 'reply-to', value: scenario.reply_to });
+  }
+  if (scenario.mailed_by) {
+    detailRows.push({ label: 'mailed-by', value: scenario.mailed_by });
+  }
+  if (scenario.signed_by) {
+    detailRows.push({ label: 'signed-by', value: scenario.signed_by });
+  }
+  const detailMarkup = detailRows
+    .map(row => `
+      <div class="gmail-detail-row">
+        <span class="gmail-detail-label">${escapeHTML(row.label)}</span>
+        <span class="gmail-detail-value">${escapeHTML(row.value)}</span>
+      </div>
+    `)
+    .join('');
+  const bodyMarkup = formatEmailBody(scenario.body || '');
+  const docEmbedMarkup = scenario.doc_embed ? renderDocEmbed(scenario.doc_embed) : '';
+  const toolbarButtons = gmailToolbarIcons
+    .map(icon => `<button type="button" class="gmail-toolbar-btn" title="${escapeHTML(icon.label)}">${getToolbarIconSvg(icon.type)}</button>`)
+    .join('');
   return `
-    <div class="scenario-view email-shell">
-      <div class="email-toolbar">
-        <span class="preview-badge">${escapeHTML(scenario.preview_badge || 'Inbox')}</span>
-        <strong>${escapeHTML(scenario.subject || 'No subject')}</strong>
-        <div class="spacer"></div>
-        <span class="body-small">${escapeHTML(scenario.timestamp || '')}</span>
+    <div class="scenario-view email-shell gmail-shell">
+      <div class="gmail-toolbar" aria-hidden="true">
+        ${toolbarButtons}
       </div>
-      <div class="email-header">
-        <div class="row-between">
-          <div>
-            <strong>${escapeHTML(scenario.sender_name || 'Unknown sender')}</strong>
-            <div class="body-small">${escapeHTML(scenario.sender_email || '')}</div>
+      <div class="gmail-email">
+        <div class="gmail-header">
+          <h2 class="gmail-subject">${escapeHTML(scenario.subject || 'No subject')}</h2>
+          <div class="gmail-sender-row">
+            <div class="gmail-avatar" style="background:${avatarColor};">${escapeHTML(avatarInitial)}</div>
+            <div class="gmail-sender-meta">
+              <div class="gmail-sender-line">
+                <strong>${escapeHTML(scenario.sender_name || 'Unknown sender')}</strong>
+                <span class="gmail-sender-email">&lt;${escapeHTML(scenario.sender_email || 'unknown@domain.com')}&gt;</span>
+                <span class="gmail-recipient">to ${escapeHTML(recipientLabel)}</span>
+                ${scenario.preview_badge ? `<span class="gmail-badge">${escapeHTML(scenario.preview_badge)}</span>` : ''}
+              </div>
+              <div class="gmail-meta-row">
+                <span class="gmail-timestamp">${escapeHTML(scenario.timestamp || '')}</span>
+                <div class="gmail-meta-actions" aria-hidden="true">
+                  <button type="button" class="gmail-icon-btn" title="Reply">${getToolbarIconSvg('reply')}</button>
+                  <button type="button" class="gmail-icon-btn" title="More">${getToolbarIconSvg('kebab')}</button>
+                </div>
+              </div>
+            </div>
           </div>
-          ${scenario.preview_badge ? `<span class="preview-badge">${escapeHTML(scenario.preview_badge)}</span>` : ''}
+          <div class="gmail-header-details">
+            <button type="button" class="email-details-toggle" aria-expanded="false">
+              <span class="toggle-arrow">▾</span>
+              <span class="toggle-text">Show details</span>
+            </button>
+            <div class="gmail-detail-grid">
+              ${detailMarkup}
+            </div>
+          </div>
         </div>
-        <div class="email-recipient body-small">To: ${recipientEmail}</div>
+        <div class="gmail-email-body js-email-body">
+          ${bodyMarkup}
+          ${docEmbedMarkup}
+        </div>
+        <div class="gmail-footer-actions" aria-hidden="true">
+          <button type="button">Reply</button>
+          <button type="button">Reply all</button>
+          <button type="button">Forward</button>
+        </div>
       </div>
-      <div class="email-body">${formatMultiline(scenario.body || '')}</div>
     </div>
   `;
 }
@@ -463,6 +617,27 @@ function attachEventHandlers() {
       renderApp();
     });
   }
+
+  document.querySelectorAll('.js-email-body a').forEach(link => {
+    link.addEventListener('click', event => {
+      event.preventDefault();
+    });
+  });
+
+  document.querySelectorAll('.email-details-toggle').forEach(toggle => {
+    toggle.addEventListener('click', () => {
+      const container = toggle.closest('.gmail-header-details');
+      if (!container) {
+        return;
+      }
+      const expanded = container.classList.toggle('expanded');
+      toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      const text = toggle.querySelector('.toggle-text');
+      if (text) {
+        text.textContent = expanded ? 'Hide details' : 'Show details';
+      }
+    });
+  });
 }
 
 function handleAnswer(choice) {
