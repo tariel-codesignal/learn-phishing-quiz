@@ -337,7 +337,7 @@ function updateHeaderStatus() {
     return;
   }
   if (state.stage === 'welcome') {
-    indicator.textContent = 'Briefing: enter your info to begin';
+    indicator.textContent = 'Enter your info to begin';
     return;
   }
   if (state.stage === 'summary') {
@@ -345,7 +345,7 @@ function updateHeaderStatus() {
     return;
   }
   const currentNumber = Math.min(state.currentIndex + 1, state.scenarios.length);
-  indicator.textContent = `Scenario ${currentNumber} of ${state.scenarios.length}`;
+  indicator.textContent = `Question ${currentNumber} of ${state.scenarios.length}`;
 }
 
 function getScenarioTitle(scenario) {
@@ -463,46 +463,11 @@ function renderWelcomeCard() {
   `;
 }
 
-function renderProgressRail() {
-  const dots = state.scenarios
-    .map((_scenario, index) => {
-      const isCurrent = index === state.currentIndex && (state.stage === 'question' || state.stage === 'result');
-      const answer = state.answers[index];
-      const classes = ['progress-dot'];
-      let status = 'upcoming';
-      if (answer?.isCorrect === true) {
-        status = 'correct';
-      } else if (answer?.isCorrect === false) {
-        status = 'incorrect';
-      } else if (index < state.currentIndex) {
-        status = 'visited';
-      }
-      if (isCurrent) {
-        if (status === 'correct') {
-          status = 'current-correct';
-        } else if (status === 'incorrect') {
-          status = 'current-incorrect';
-        } else {
-          status = 'current';
-        }
-      }
-      classes.push(`status-${status}`);
-      return `<span class="${classes.join(' ')}" aria-hidden="true"></span>`;
-    })
-    .join('');
-  return `
-    <div class="scenario-progress-rail" aria-label="Scenario progress">
-      ${dots}
-    </div>
-  `;
-}
-
 function renderScenarioCard(scenario) {
   const personalizedScenario = personalizeScenario(scenario);
   const promptCopy = escapeHTML(getScenarioPromptCopy(personalizedScenario));
   return `
     <div class="app-card scenario-card">
-      ${renderProgressRail()}
       <p class="scenario-prompt">${promptCopy}</p>
       <div class="scenario-action-bar app-actions">
         <button class="button button-danger" id="btn-phishing">Phishing</button>
@@ -536,7 +501,6 @@ function renderResultCard(scenario) {
 
   return `
     <div class="app-card scenario-card result-card">
-      ${renderProgressRail()}
       <div class="result-callout" data-state="${lastAnswer.isCorrect ? 'correct' : 'incorrect'}">
         <h2>${heading}</h2>
       </div>
@@ -836,6 +800,21 @@ function renderApp() {
 }
 
 function attachEventHandlers() {
+  const homeButton = document.getElementById('header-home');
+  if (homeButton) {
+    homeButton.addEventListener('click', () => {
+      if (!state.scenarios.length) {
+        state.stage = 'loading';
+        renderApp();
+        return;
+      }
+      const reloadedScenarios = state.scenarios.slice();
+      resetQuizWithScenarios(reloadedScenarios);
+      state.profile = { name: '', email: '' };
+      renderApp();
+    });
+  }
+
   const introForm = document.getElementById('quiz-intro-form');
   if (introForm) {
     introForm.addEventListener('submit', event => {

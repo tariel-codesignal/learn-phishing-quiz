@@ -8,7 +8,7 @@
 .bespoke {
   font-family: var(--body-family);
   color: var(--Colors-Text-Body-Default);
-  background: var(--Colors-Backgrounds-Main-Default);
+  background: #fff;
   line-height: 1.6;
   margin: 0;
   padding: 0;
@@ -20,13 +20,17 @@
 
 /* Header */
 .bespoke .header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: var(--UI-Spacing-spacing-ml);
-  padding: var(--UI-Spacing-spacing-s) var(--UI-Spacing-spacing-mxl);
-  border-bottom: 1px solid var(--Colors-Stroke-Default);
-  background: var(--Colors-Backgrounds-Main-Top);
+  gap: var(--UI-Spacing-spacing-m);
+  padding: var(--UI-Spacing-spacing-m) var(--UI-Spacing-spacing-xxl);
+  border-bottom: 1px solid #e0e0e0;
+  background: #fff;
   width: 100%;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .bespoke .header h1 {
@@ -44,7 +48,8 @@
 
 .bespoke .content-area {
   width: 100%;
-  padding: var(--UI-Spacing-spacing-xl) var(--UI-Spacing-spacing-mxl);
+  padding: clamp(1.5rem, 4vw, 3rem) var(--UI-Spacing-spacing-mxl) clamp(3rem, 6vw, 4rem);
+  background: #fff;
 }
 
 /* ===== UTILITY CLASSES ===== */

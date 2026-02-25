@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Can You Spot the Phish?</title>
+  <title>CodeSignal Phishing Quiz</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- Fonts (Work Sans) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -28,13 +28,16 @@
 </head>
 <body class="bespoke">
   <!-- Navigation Header -->
-  <header class="header">
-    <div class="row">
-      <h1 class="heading-small">Can You Spot the Phish?</h1>
-      <span class="tag" id="theme-indicator">Training Mode</span>
+  <header class="header app-header">
+    <div class="header-section header-left">
+      <button type="button" class="header-title" id="header-home">CodeSignal phishing quiz</button>
     </div>
-    <div class="spacer"></div>
-    <button id="btn-help" class="button button-text">Help</button>
+    <div class="header-section header-center">
+      <span class="header-progress" id="theme-indicator">Loading scenarios...</span>
+    </div>
+    <div class="header-section header-right">
+      <button id="btn-help" class="button button-text header-help">Help</button>
+    </div>
   </header>
 
   <main class="main-layout">
