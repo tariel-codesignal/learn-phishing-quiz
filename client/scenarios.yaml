@@ -64,6 +64,9 @@
 - id: sms-package-fee
   interface: sms
   sender_name: USPS Notice
+  sender_number: "+1 (510) 224-9081"
+  carrier: Text Message
+  thread_timestamp: Today 10:02 AM
   body: |
     Hi {{name}}, USPS: Package held. Pay the $1.97 redelivery fee to release today https://usps-clearance-support.com
   timestamp: 10:02 AM
@@ -78,6 +81,9 @@
 - id: sms-calendar-reminder
   interface: sms
   sender_name: HR Bot
+  sender_number: "HR-Notify"
+  carrier: iMessage
+  thread_timestamp: Today 3:47 PM
   body: |
     Hey {{name}}, friendly reminder: Your annual benefits review with Dana is tomorrow at 2:30 PM. Reply C to confirm.
   timestamp: 3:47 PM
@@ -90,33 +96,65 @@
 
 - id: slack-expense-warning
   interface: slack
+  workspace: Company HQ
   channel: #finance-alerts
+  channel_members: 148
   sender_name: Finance Automation
   sender_handle: finance-bot
   avatar_initials: FA
+  avatar_color: "#e01e5a"
+  is_bot: true
+  verified_app: false
+  external_org: External org
   timestamp: 11:18 AM
   body: |
-    WARNING: @{{name}}, expense policy update. We detected unmatched expenses in your card feed. Download the CSV here and respond within 1 hour -> https://slack-files-secure.s3-us-west-2.amazonaws-notreally.com
+    :warning: @{{name}}, expense policy update. We detected unmatched expenses in your card feed. Download the CSV here and respond within 1 hour -> https://slack-files-secure.s3-us-west-2.amazonaws-notreally.com
+  attachment:
+    tag: file shared
+    title: Expense anomalies.csv
+    url: https://slack-files-secure.s3-us-west-2.amazonaws-notreally.com/expense-anomalies.csv
+    description: Auto-export generated from unresolved card transactions.
+  reactions:
+    - emoji: "👀"
+      count: 1
+    - emoji: "⚠️"
+      count: 3
+  thread_replies: 2
+  thread_last_reply: 4 minutes ago
+  edited: true
   is_phishing: true
   red_flags:
-    - External file link hosted on a spoofed AWS bucket.
-    - Unrealistic one-hour deadline and fear-based emoji.
-    - Finance alerts normally come from Workday, not a generic bot.
+    - Bot appears as an unverified app and shows an external organization badge.
+    - File preview links to a spoofed AWS host, not your approved finance systems.
+    - Unrealistic one-hour deadline designed to force rushed behavior.
+    - Message was edited after posting, which is unusual for automated compliance alerts.
   explanation: |
-    Attackers often drop malicious files via spoofed links in Slack. Confirm alerts in Workday before downloading anything.
+    Attackers often impersonate internal bots in Slack and attach malicious files. In a real incident, verify the app identity and check the destination domain before opening attachments.
 
 - id: slack-incident-report
   interface: slack
+  workspace: Company HQ
   channel: Direct message with SecOps
+  channel_members: 2
   sender_name: Nina Lopez
   sender_handle: nina.lopez
   avatar_initials: NL
+  avatar_color: "#2f9e44"
+  is_bot: false
+  verified_app: false
   timestamp: 5:06 PM
   body: |
     Hey {{name}}! Appreciate you flagging the login weirdness earlier. We captured the logs tied to {{email}} and no action is needed from you now. I'll share the retro doc tomorrow.
+  reactions:
+    - emoji: "✅"
+      count: 1
+      selected: true
+  thread_replies: 1
+  thread_last_reply: just now
   is_phishing: false
   red_flags:
     - Message references an ongoing thread with the known SecOps lead.
+    - Direct message comes from a known teammate account, not an unverified app.
     - No links or sensitive data requests, just status context.
   explanation: |
     This is a legitimate follow-up keeping you posted. Actual SecOps contacts use their verified accounts and keep requests specific.

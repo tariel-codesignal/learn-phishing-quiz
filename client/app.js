@@ -15,6 +15,10 @@ const state = {
   profile: {
     name: '',
     email: ''
+  },
+  profileValidation: {
+    name: '',
+    email: ''
   }
 };
 
@@ -39,6 +43,37 @@ function formatMultiline(text = '') {
 function getProfileValue(key, fallback) {
   const value = (state.profile[key] || '').trim();
   return value || fallback;
+}
+
+function isValidEmail(value = '') {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(trimmed)) {
+    return false;
+  }
+  if (trimmed.includes('..')) {
+    return false;
+  }
+  const [, domain = ''] = trimmed.split('@');
+  if (domain.startsWith('.') || domain.endsWith('.')) {
+    return false;
+  }
+  return true;
+}
+
+function validateProfileInput(name = '', email = '') {
+  const nextErrors = { name: '', email: '' };
+  if (!name.trim()) {
+    nextErrors.name = 'Name is required.';
+  }
+  if (!email.trim()) {
+    nextErrors.email = 'Email is required.';
+  } else if (!isValidEmail(email)) {
+    nextErrors.email = 'Use a valid email format, like name@gmail.com.';
+  }
+  return nextErrors;
 }
 
 function personalizeText(text = '') {
@@ -83,6 +118,18 @@ function getAvatarColor(seed = '') {
   return palette[code % palette.length];
 }
 
+function resetQuizWithScenarios(nextScenarios = [], options = {}) {
+  const { skipWelcome = false } = options;
+  state.scenarios = nextScenarios;
+  state.answers = new Array(nextScenarios.length).fill(null);
+  state.stage = skipWelcome ? 'question' : 'welcome';
+  state.hasLoggedSummary = false;
+  state.currentIndex = 0;
+  state.lastAnswer = null;
+  state.errorMessage = '';
+  state.profileValidation = { name: '', email: '' };
+}
+
 function formatEmailBody(text = '') {
   if (!text) {
     return '';
@@ -95,12 +142,106 @@ function formatEmailBody(text = '') {
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     html = html.replace(/_(.+?)_/g, '<em>$1</em>');
     html = html.replace(/\[(.+?)\]\((.+?)\)/g, (_match, label, href) => {
-      const safeHref = escapeAttribute(href.trim());
-      return `<a href="${safeHref}" class="gmail-link">${label}</a>`;
+      const hrefValue = href.trim();
+      const safeHref = escapeAttribute(hrefValue);
+      const safeLabel = escapeHTML(label.trim());
+      return `<span class="gmail-link-wrap"><a href="${safeHref}" class="gmail-link" data-link-preview="${safeHref}">${safeLabel}</a></span>`;
     });
     return html.replace(/\n/g, '<br />');
   };
   return blocks.map(block => `<p>${transformInline(block)}</p>`).join('');
+}
+
+function formatSlackBody(text = '') {
+  if (!text) {
+    return '';
+  }
+  let html = escapeHTML(text);
+  html = html.replace(/(^|\s)@([a-zA-Z0-9._-]+)/g, (_match, prefix, handle) => `${prefix}<span class="slack-mention">@${handle}</span>`);
+  html = html.replace(/(https?:\/\/[^\s<]+)/g, url => {
+    const safeHref = escapeAttribute(url);
+    let hostname = 'link';
+    try {
+      hostname = new URL(url).hostname.replace(/^www\./i, '');
+    } catch (_error) {
+      hostname = 'link';
+    }
+    return `<a href="${safeHref}" class="slack-link" data-domain="${escapeAttribute(hostname)}">${escapeHTML(url)}</a>`;
+  });
+  return html.replace(/\n/g, '<br />');
+}
+
+function formatSmsBody(text = '') {
+  if (!text) {
+    return '';
+  }
+  let html = escapeHTML(text);
+  html = html.replace(/(https?:\/\/[^\s<]+)/g, url => {
+    const safeHref = escapeAttribute(url);
+    return `<a href="${safeHref}" class="sms-link" data-link-preview="${safeHref}">${escapeHTML(url)}</a>`;
+  });
+  return html.replace(/\n/g, '<br />');
+}
+
+function getSmsMeta(scenario) {
+  const sender = scenario.sender_name || 'Unknown number';
+  const senderNumber = scenario.sender_number || '';
+  const carrier = scenario.carrier || 'Text Message';
+  return {
+    sender,
+    senderNumber,
+    carrier
+  };
+}
+
+function renderSlackAttachment(attachment = {}) {
+  if (!attachment.title || !attachment.url) {
+    return '';
+  }
+  const domain = attachment.domain || (() => {
+    try {
+      return new URL(attachment.url).hostname;
+    } catch (_error) {
+      return '';
+    }
+  })();
+  return `
+    <div class="slack-attachment">
+      ${attachment.tag ? `<span class="slack-attachment-tag">${escapeHTML(attachment.tag)}</span>` : ''}
+      <a href="${escapeAttribute(attachment.url)}" class="slack-attachment-title">${escapeHTML(attachment.title)}</a>
+      ${attachment.description ? `<p>${escapeHTML(attachment.description)}</p>` : ''}
+      ${domain ? `<span class="slack-attachment-domain">${escapeHTML(domain)}</span>` : ''}
+    </div>
+  `;
+}
+
+function renderSlackReactions(reactions = []) {
+  if (!Array.isArray(reactions) || !reactions.length) {
+    return '';
+  }
+  const items = reactions
+    .map(reaction => `
+      <button type="button" class="slack-reaction${reaction.selected ? ' selected' : ''}" aria-label="Reaction ${escapeHTML(reaction.emoji || '')}">
+        <span>${escapeHTML(reaction.emoji || '')}</span>
+        <span>${escapeHTML(String(reaction.count ?? 1))}</span>
+      </button>
+    `)
+    .join('');
+  return `<div class="slack-reactions">${items}</div>`;
+}
+
+function renderSlackThreadFooter(scenario) {
+  if (!scenario.thread_replies) {
+    return '';
+  }
+  const repliesText = `${scenario.thread_replies} repl${scenario.thread_replies === 1 ? 'y' : 'ies'}`;
+  const lastReply = scenario.thread_last_reply ? `Last reply ${escapeHTML(scenario.thread_last_reply)}` : '';
+  return `
+    <div class="slack-thread-row">
+      <span class="slack-thread-link">${escapeHTML(repliesText)}</span>
+      ${lastReply ? `<span class="slack-thread-meta">${lastReply}</span>` : ''}
+    </div>
+  `;
 }
 
 function renderDocEmbed(docEmbed = {}) {
@@ -117,7 +258,7 @@ function renderDocEmbed(docEmbed = {}) {
       <div class="gmail-doc-icon ${iconClass}" aria-hidden="true"></div>
       <div class="gmail-doc-copy">
         <div class="gmail-doc-title">${docTitle}</div>
-        <a href="${docUrl}" class="gmail-doc-link">Open in ${iconLabel}</a>
+        <a href="${docUrl}" class="gmail-doc-link" data-link-preview="${docUrl}">Open in ${iconLabel}</a>
       </div>
     </div>
   `;
@@ -154,6 +295,12 @@ function getToolbarIconSvg(type) {
       return `<svg ${svgAttrs}><polyline points="13 7 8 12 13 17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></polyline><path d="M8 12h8a4 4 0 0 1 4 4v0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>`;
     case 'kebab':
       return `<svg ${svgAttrs}><circle cx="12" cy="6" r="1.2" fill="currentColor"></circle><circle cx="12" cy="12" r="1.2" fill="currentColor"></circle><circle cx="12" cy="18" r="1.2" fill="currentColor"></circle></svg>`;
+    case 'star':
+      return `<svg ${svgAttrs}><polygon points="12 3.8 14.8 9.3 20.8 10.2 16.4 14.4 17.4 20.2 12 17.4 6.6 20.2 7.6 14.4 3.2 10.2 9.2 9.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></polygon></svg>`;
+    case 'print':
+      return `<svg ${svgAttrs}><rect x="7" y="4.5" width="10" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"></rect><rect x="6" y="14" width="12" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"></rect><rect x="4" y="9" width="16" height="6" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"></rect></svg>`;
+    case 'open':
+      return `<svg ${svgAttrs}><path d="M14 5h5v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path><path d="M10 14 19 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path><rect x="5" y="9" width="10" height="10" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.6"></rect></svg>`;
     default:
       return '';
   }
@@ -174,13 +321,7 @@ async function loadScenarios() {
     if (!Array.isArray(parsed)) {
       throw new Error('Scenario file must contain a list.');
     }
-    state.scenarios = parsed;
-    state.answers = new Array(parsed.length).fill(null);
-    state.stage = 'welcome';
-    state.hasLoggedSummary = false;
-    state.currentIndex = 0;
-    state.lastAnswer = null;
-    state.errorMessage = '';
+    resetQuizWithScenarios(parsed);
   } catch (error) {
     console.error('Unable to load scenarios:', error);
     state.stage = 'error';
@@ -246,6 +387,10 @@ function renderWelcomeCard() {
   const scenarioLabel = scenarioCount ? `${scenarioCount} quick scenarios` : 'a quick set of scenarios';
   const nameValue = escapeHTML(state.profile.name || '');
   const emailValue = escapeHTML(state.profile.email || '');
+  const nameError = state.profileValidation.name || '';
+  const emailError = state.profileValidation.email || '';
+  const nameInputClass = `landing-input${nameError ? ' invalid' : ''}`;
+  const emailInputClass = `landing-input${emailError ? ' invalid' : ''}`;
   return `
     <div class="app-card welcome-hero">
       <div class="welcome-copy">
@@ -257,24 +402,66 @@ function renderWelcomeCard() {
           type="text"
           id="participant-name"
           name="participant-name"
-          class="landing-input"
-          placeholder="First name"
+          class="${nameInputClass}"
+          placeholder="First name (e.g., Alex)"
           aria-label="First name"
+          autocomplete="given-name"
           value="${nameValue}"
+          required
+          aria-invalid="${nameError ? 'true' : 'false'}"
         />
+        ${nameError ? `<p class="landing-error" role="alert">${escapeHTML(nameError)}</p>` : ''}
         <input
-          type="text"
+          type="email"
           id="participant-email"
           name="participant-email"
-          class="landing-input"
-          placeholder="Email"
+          class="${emailInputClass}"
+          placeholder="Email (e.g., alex@example.com)"
           inputmode="email"
           aria-label="Email"
+          autocomplete="email"
           value="${emailValue}"
+          required
+          aria-invalid="${emailError ? 'true' : 'false'}"
         />
-        <p class="landing-hint">We only use this to personalize each message.</p>
+        ${emailError ? `<p class="landing-error" role="alert">${escapeHTML(emailError)}</p>` : ''}
+        <p class="landing-hint">Please enter your name and a valid email address to personalize the training scenarios.</p>
         <button class="button landing-cta" type="submit">Take the Quiz</button>
       </form>
+    </div>
+  `;
+}
+
+function renderProgressRail() {
+  const dots = state.scenarios
+    .map((_scenario, index) => {
+      const isCurrent = index === state.currentIndex && (state.stage === 'question' || state.stage === 'result');
+      const answer = state.answers[index];
+      const classes = ['progress-dot'];
+      let status = 'upcoming';
+      if (answer?.isCorrect === true) {
+        status = 'correct';
+      } else if (answer?.isCorrect === false) {
+        status = 'incorrect';
+      } else if (index < state.currentIndex) {
+        status = 'visited';
+      }
+      if (isCurrent) {
+        if (status === 'correct') {
+          status = 'current-correct';
+        } else if (status === 'incorrect') {
+          status = 'current-incorrect';
+        } else {
+          status = 'current';
+        }
+      }
+      classes.push(`status-${status}`);
+      return `<span class="${classes.join(' ')}" aria-hidden="true"></span>`;
+    })
+    .join('');
+  return `
+    <div class="scenario-progress-rail" aria-label="Scenario progress">
+      ${dots}
     </div>
   `;
 }
@@ -284,6 +471,7 @@ function renderScenarioCard(scenario) {
   const { correct } = getScore();
   return `
     <div class="app-card">
+      ${renderProgressRail()}
       <div class="row-between">
         <div class="quiz-meta">
           <p class="body-small scenario-stage">${personalizedScenario.interface.toUpperCase()} SIMULATION</p>
@@ -310,6 +498,7 @@ function renderResultCard(scenario) {
   const personalizedScenario = personalizeScenario(scenario);
   const correctLabel = scenario.is_phishing ? 'Phishing' : 'Legit';
   const userLabel = lastAnswer.userAnswer === 'phishing' ? 'Phishing' : 'Legit';
+  const signalsHeading = scenario.is_phishing ? 'Red Flags' : 'Legitimacy Signals';
   const heading = lastAnswer.isCorrect ? 'Correct - great catch!' : 'Not quite.';
   const description = lastAnswer.isCorrect
     ? 'You spotted the right cues.'
@@ -318,6 +507,7 @@ function renderResultCard(scenario) {
 
   return `
     <div class="app-card">
+      ${renderProgressRail()}
       <div class="result-callout">
         <h2>${heading}</h2>
         <p>${description}</p>
@@ -325,7 +515,7 @@ function renderResultCard(scenario) {
       </div>
       ${renderInterfaceShell(personalizedScenario)}
       <div>
-        <h3>Red Flags</h3>
+        <h3>${signalsHeading}</h3>
         ${renderRedFlags(personalizedScenario.red_flags)}
       </div>
       <div>
@@ -401,6 +591,9 @@ function renderEmailShell(scenario) {
   const avatarSeed = scenario.sender_name || scenario.sender_email || '?';
   const avatarInitial = avatarSeed.trim().charAt(0).toUpperCase() || '?';
   const avatarColor = getAvatarColor(avatarSeed);
+  const senderDomain = (scenario.sender_email || '').split('@')[1] || '';
+  const viaDomain = scenario.mailed_by && scenario.mailed_by !== senderDomain ? scenario.mailed_by : '';
+  const signedDomain = scenario.signed_by || '';
   const detailRows = [
     {
       label: 'from',
@@ -438,13 +631,22 @@ function renderEmailShell(scenario) {
       </div>
       <div class="gmail-email">
         <div class="gmail-header">
-          <h2 class="gmail-subject">${escapeHTML(scenario.subject || 'No subject')}</h2>
+          <div class="gmail-subject-row">
+            <h2 class="gmail-subject">${escapeHTML(scenario.subject || 'No subject')}</h2>
+            <div class="gmail-subject-actions" aria-hidden="true">
+              <button type="button" class="gmail-icon-btn" title="Star">${getToolbarIconSvg('star')}</button>
+              <button type="button" class="gmail-icon-btn" title="Print">${getToolbarIconSvg('print')}</button>
+              <button type="button" class="gmail-icon-btn" title="Open in new window">${getToolbarIconSvg('open')}</button>
+            </div>
+          </div>
           <div class="gmail-sender-row">
             <div class="gmail-avatar" style="background:${avatarColor};">${escapeHTML(avatarInitial)}</div>
             <div class="gmail-sender-meta">
               <div class="gmail-sender-line">
                 <strong>${escapeHTML(scenario.sender_name || 'Unknown sender')}</strong>
                 <span class="gmail-sender-email">&lt;${escapeHTML(scenario.sender_email || 'unknown@domain.com')}&gt;</span>
+                ${viaDomain ? `<span class="gmail-via-pill">via ${escapeHTML(viaDomain)}</span>` : ''}
+                ${signedDomain ? `<span class="gmail-auth-pill">signed-by ${escapeHTML(signedDomain)}</span>` : ''}
                 <span class="gmail-recipient">to ${escapeHTML(recipientLabel)}</span>
                 ${scenario.preview_badge ? `<span class="gmail-badge">${escapeHTML(scenario.preview_badge)}</span>` : ''}
               </div>
@@ -476,39 +678,101 @@ function renderEmailShell(scenario) {
           <button type="button">Reply all</button>
           <button type="button">Forward</button>
         </div>
+        <div class="gmail-link-preview" aria-live="polite"></div>
       </div>
     </div>
   `;
 }
 
 function renderSmsShell(scenario) {
+  const smsMeta = getSmsMeta(scenario);
+  const messageTime = scenario.timestamp || '';
+  const threadTimestamp = scenario.thread_timestamp || 'Today';
+  const senderLabel = smsMeta.senderNumber
+    ? `${smsMeta.sender} (${smsMeta.senderNumber})`
+    : smsMeta.sender;
   return `
     <div class="scenario-view sms-shell">
-      <div class="sms-header">
-        <h3>${escapeHTML(scenario.sender_name || 'Unknown number')}</h3>
-        <p class="body-small">${escapeHTML(scenario.timestamp || '')}</p>
+      <div class="sms-phone-frame">
+        <div class="sms-topbar" aria-hidden="true">
+          <span class="sms-top-action">Messages</span>
+          <div class="sms-contact-meta">
+            <strong>${escapeHTML(senderLabel)}</strong>
+            <span>${escapeHTML(smsMeta.carrier)}</span>
+          </div>
+          <span class="sms-top-action">Details</span>
+        </div>
+        <div class="sms-thread">
+          <div class="sms-thread-timestamp">${escapeHTML(threadTimestamp)}</div>
+          <div class="sms-message-row incoming">
+            <div class="sms-bubble sender js-sms-body">${formatSmsBody(scenario.body || '')}</div>
+          </div>
+          ${messageTime ? `<div class="sms-delivery-time">${escapeHTML(messageTime)}</div>` : ''}
+        </div>
+        <div class="sms-composer" aria-hidden="true">
+          <span class="sms-compose-placeholder">iMessage</span>
+          <button type="button" class="sms-send-button">↑</button>
+        </div>
       </div>
-      <div class="sms-bubble sender">${formatMultiline(scenario.body || '')}</div>
     </div>
   `;
 }
 
 function renderSlackShell(scenario) {
   const initials = (scenario.avatar_initials || (scenario.sender_name || '?').substring(0, 2)).toUpperCase();
+  const avatarColor = scenario.avatar_color || getAvatarColor(scenario.sender_name || scenario.sender_handle || 'slack');
+  const memberCount = scenario.channel_members ? `${scenario.channel_members} members` : '';
+  const senderBadge = scenario.is_bot ? '<span class="slack-sender-badge">APP</span>' : '';
+  const verificationBadge = scenario.verified_app ? '<span class="slack-verified-badge">Verified</span>' : '';
+  const externalBadge = scenario.external_org ? `<span class="slack-external-badge">${escapeHTML(scenario.external_org)}</span>` : '';
+  const editedLabel = scenario.edited ? '<span class="slack-edited">(edited)</span>' : '';
+  const attachmentMarkup = renderSlackAttachment(scenario.attachment || {});
+  const reactionsMarkup = renderSlackReactions(scenario.reactions || []);
+  const threadFooterMarkup = renderSlackThreadFooter(scenario);
   return `
     <div class="scenario-view slack-shell">
-      <div class="slack-topbar">
-        <span class="slack-channel">${escapeHTML(scenario.channel || 'Direct message')}</span>
-      </div>
-      <div class="slack-message">
-        <div class="slack-avatar">${escapeHTML(initials)}</div>
-        <div class="slack-body">
-          <div class="row-between" style="color:#f4f4f7;">
-            <strong>${escapeHTML(scenario.sender_name || 'Teammate')}</strong>
-            <span class="body-small">${escapeHTML(scenario.timestamp || '')}</span>
+      <div class="slack-frame">
+        <aside class="slack-sidebar" aria-hidden="true">
+          <div class="slack-workspace">${escapeHTML(scenario.workspace || 'Company Workspace')}</div>
+          <div class="slack-sidebar-group">
+            <span class="slack-sidebar-title">Channels</span>
+            <div class="slack-sidebar-item"># announcements</div>
+            <div class="slack-sidebar-item active">${escapeHTML(scenario.channel || '#general')}</div>
+            <div class="slack-sidebar-item"># help-it</div>
           </div>
-          <div class="body-small" style="color:#cfd2ff;">@${escapeHTML(scenario.sender_handle || 'user')}</div>
-          <p>${formatMultiline(scenario.body || '')}</p>
+          <div class="slack-sidebar-group">
+            <span class="slack-sidebar-title">Direct messages</span>
+            <div class="slack-sidebar-item">@${escapeHTML(scenario.sender_handle || 'user')}</div>
+          </div>
+        </aside>
+        <div class="slack-main">
+          <div class="slack-topbar">
+            <div class="slack-channel-wrap">
+              <span class="slack-channel">${escapeHTML(scenario.channel || 'Direct message')}</span>
+              ${memberCount ? `<span class="slack-channel-meta">${escapeHTML(memberCount)}</span>` : ''}
+            </div>
+            <div class="slack-top-actions" aria-hidden="true">⌕ ⓘ</div>
+          </div>
+          <div class="slack-message">
+            <div class="slack-avatar" style="background:${escapeAttribute(avatarColor)};">${escapeHTML(initials)}</div>
+            <div class="slack-body">
+              <div class="slack-sender-row">
+                <strong>${escapeHTML(scenario.sender_name || 'Teammate')}</strong>
+                ${senderBadge}
+                ${verificationBadge}
+                ${externalBadge}
+                <span class="body-small slack-timestamp">${escapeHTML(scenario.timestamp || '')}</span>
+              </div>
+              <div class="body-small slack-handle">@${escapeHTML(scenario.sender_handle || 'user')}</div>
+              <p class="js-slack-body">${formatSlackBody(scenario.body || '')} ${editedLabel}</p>
+              ${attachmentMarkup}
+              ${reactionsMarkup}
+              ${threadFooterMarkup}
+            </div>
+          </div>
+          <div class="slack-composer" aria-hidden="true">
+            <span>Message ${escapeHTML(scenario.channel || '#channel')}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -558,8 +822,16 @@ function attachEventHandlers() {
     introForm.addEventListener('submit', event => {
       event.preventDefault();
       const formData = new FormData(introForm);
-      state.profile.name = (formData.get('participant-name') || '').toString().trim();
-      state.profile.email = (formData.get('participant-email') || '').toString().trim();
+      const nextName = (formData.get('participant-name') || '').toString().trim();
+      const nextEmail = (formData.get('participant-email') || '').toString().trim();
+      const nextValidation = validateProfileInput(nextName, nextEmail);
+      state.profileValidation = nextValidation;
+      state.profile.name = nextName;
+      state.profile.email = nextEmail;
+      if (nextValidation.name || nextValidation.email) {
+        renderApp();
+        return;
+      }
       state.stage = 'question';
       state.currentIndex = 0;
       renderApp();
@@ -610,15 +882,47 @@ function attachEventHandlers() {
 
   const restartBtn = document.getElementById('restart-training');
   if (restartBtn) {
-    restartBtn.addEventListener('click', async () => {
-      state.stage = 'loading';
-      renderApp();
-      await loadScenarios();
+    restartBtn.addEventListener('click', () => {
+      resetQuizWithScenarios([...state.scenarios], { skipWelcome: true });
       renderApp();
     });
   }
 
   document.querySelectorAll('.js-email-body a').forEach(link => {
+    link.addEventListener('click', event => {
+      event.preventDefault();
+    });
+  });
+
+  const gmailLinkPreview = document.querySelector('.gmail-link-preview');
+  if (gmailLinkPreview) {
+    const showPreview = href => {
+      if (!href) {
+        return;
+      }
+      gmailLinkPreview.textContent = href;
+      gmailLinkPreview.classList.add('visible');
+    };
+    const hidePreview = () => {
+      gmailLinkPreview.textContent = '';
+      gmailLinkPreview.classList.remove('visible');
+    };
+    document.querySelectorAll('.js-email-body a[data-link-preview]').forEach(link => {
+      const href = link.getAttribute('data-link-preview') || '';
+      link.addEventListener('mouseenter', () => showPreview(href));
+      link.addEventListener('focus', () => showPreview(href));
+      link.addEventListener('mouseleave', hidePreview);
+      link.addEventListener('blur', hidePreview);
+    });
+  }
+
+  document.querySelectorAll('.js-slack-body a, .slack-attachment a').forEach(link => {
+    link.addEventListener('click', event => {
+      event.preventDefault();
+    });
+  });
+
+  document.querySelectorAll('.js-sms-body a').forEach(link => {
     link.addEventListener('click', event => {
       event.preventDefault();
     });
