@@ -101,11 +101,12 @@
 .summary-card {
   width: min(100%, 960px);
   margin: 0 auto;
-  background: #f9fafc;
-  border-radius: 24px;
-  padding: clamp(1.5rem, 4vw, 2.5rem);
-  border: 1px solid #e4e7f0;
-  box-shadow: 0 18px 40px rgba(32, 33, 36, 0.08);
+  background: #fff;
+  border-radius: 32px;
+  padding: clamp(2rem, 5vw, 3rem);
+  border: 1px solid #dfe3ed;
+  box-shadow: 0 28px 60px rgba(14, 23, 44, 0.08);
+  gap: var(--UI-Spacing-spacing-xl);
 }
 
 .app-root[data-stage="question"] .app-card,
@@ -238,45 +239,138 @@
   background: #f1f3f4;
 }
 
-.scenario-list {
-  list-style: none;
-  padding: 0;
-  margin: var(--UI-Spacing-spacing-s) 0 0;
+.summary-hero {
+  text-align: center;
   display: flex;
   flex-direction: column;
-  gap: var(--UI-Spacing-spacing-xs);
+  gap: 0.35rem;
+}
+
+.summary-label {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.78rem;
+  color: #5f6368;
+}
+
+.summary-hero h2 {
+  margin: 0;
+  font-size: clamp(1.8rem, 4vw, 2.4rem);
+  color: #202124;
+}
+
+.summary-lede {
+  margin: 0;
+  color: #3c4043;
+  font-size: 1rem;
+}
+
+.summary-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--UI-Spacing-spacing-m);
+}
+
+.metric-card {
+  background: #f5f7fb;
+  border: 1px solid #e2e7f4;
+  border-radius: 22px;
+  padding: 1.25rem 1rem;
+  text-align: center;
+}
+
+.metric-value {
+  display: block;
+  font-size: 1.9rem;
+  font-weight: 600;
+  color: #202124;
+}
+
+.metric-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #5f6368;
+}
+
+.summary-breakdown h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  color: #202124;
+}
+
+.scenario-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.scenario-card .scenario-list {
+  margin-top: var(--UI-Spacing-spacing-xs);
 }
 
 .scenario-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--UI-Spacing-spacing-xs) var(--UI-Spacing-spacing-s);
-  border-radius: var(--UI-Radius-radius-s);
-  border: 1px solid transparent;
-  font-size: 0.95rem;
-  background: var(--Colors-Backgrounds-Subtle);
+  gap: 1rem;
+  padding: 0.9rem 1.2rem;
+  border-radius: 18px;
+  border: 1px solid #e1e4f0;
+  background: #fdfdff;
 }
 
-.scenario-item .status-pill {
-  font-size: 0.75rem;
+.scenario-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.scenario-item-title {
+  font-weight: 600;
+  color: #202124;
+}
+
+.scenario-item-meta {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  color: #6b7280;
 }
 
-.scenario-item.active {
-  border-color: var(--Colors-Primary-Default);
-  background: color-mix(in srgb, var(--Colors-Primary-Default) 12%, transparent);
+.status-pill {
+  border-radius: 999px;
+  padding: 0.25rem 1rem;
+  font-size: 0.78rem;
+  font-weight: 600;
 }
 
-.scenario-item.completed.correct {
-  border-color: var(--Colors-Success-Default);
-  background: color-mix(in srgb, var(--Colors-Success-Default) 12%, transparent);
+.scenario-item.correct {
+  border-color: rgba(30, 178, 103, 0.4);
+  background: #f1fbf6;
 }
 
-.scenario-item.completed.incorrect {
-  border-color: var(--Colors-Danger-Default);
-  background: color-mix(in srgb, var(--Colors-Danger-Default) 12%, transparent);
+.scenario-item.correct .status-pill {
+  background: #d5f3e5;
+  color: #0f7b4d;
+}
+
+.scenario-item.incorrect {
+  border-color: rgba(234, 67, 53, 0.35);
+  background: #fff6f5;
+}
+
+.scenario-item.incorrect .status-pill {
+  background: #fcdad6;
+  color: #c41c10;
+}
+
+.summary-actions {
+  justify-content: center;
 }
 
 .welcome-hero {
@@ -780,22 +874,22 @@
 
 .sms-shell {
   background: radial-gradient(circle at top, #eff4ff 0%, #e5ebfb 48%, #d8dfef 100%);
-  padding: var(--UI-Spacing-spacing-l);
-  border-radius: 20px;
+  padding: var(--UI-Spacing-spacing-xl) var(--UI-Spacing-spacing-xxl);
+  border-radius: 28px;
   display: flex;
   justify-content: center;
 }
 
 .sms-phone-frame {
-  width: min(430px, 100%);
+  width: min(360px, 90vw);
   background: #f7f8fc;
   border: 1px solid #d5dae8;
-  border-radius: 26px;
-  box-shadow: 0 14px 26px rgba(24, 32, 56, 0.16);
+  border-radius: 34px;
+  box-shadow: 0 20px 34px rgba(24, 32, 56, 0.22);
   overflow: hidden;
   display: grid;
   grid-template-rows: auto 1fr auto;
-  min-height: 460px;
+  min-height: 640px;
 }
 
 .sms-topbar {
@@ -1215,8 +1309,9 @@
 }
 
 .summary-card .scenario-list {
-  max-height: 320px;
+  max-height: 360px;
   overflow: auto;
+  padding-right: 0.25rem;
 }
 
 @keyframes stage-card-enter {

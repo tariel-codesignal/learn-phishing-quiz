@@ -522,15 +522,29 @@ function renderSummaryCard() {
   const { correct, total } = getScore();
   const incorrect = total - correct;
   const percentage = total ? Math.round((correct / total) * 100) : 0;
+  const participantName = (getProfileValue('name', '').trim()) || '';
+  const heroTitle = participantName
+    ? `Nice work, ${escapeHTML(participantName)}!`
+    : 'Nice work!';
+  const heroCopy = total
+    ? `You spotted ${correct} of ${total} messages correctly. Keep practicing to reach 100%.`
+    : 'Ready to take the CodeSignal phishing quiz?';
+  const scoreValue = total ? `${correct}/${total}` : '0/0';
+  const resultsLabel = total ? `${percentage}%` : '0%';
+  const missedLabel = total ? `${incorrect}` : '0';
   const resultsList = state.scenarios
     .map((scenario, index) => {
       const personalized = personalizeScenario(scenario);
       const answer = state.answers[index];
       const isCorrect = Boolean(answer?.isCorrect);
       const statusClass = isCorrect ? 'correct' : 'incorrect';
-      const label = isCorrect ? 'Correct' : 'Phishing cues missed';
+      const label = isCorrect ? 'Correct' : 'Needs review';
+      const interfaceLabel = (scenario.interface || '').toUpperCase();
       return `<li class="scenario-item completed ${statusClass}">
-        <span>${index + 1}. ${escapeHTML(getScenarioTitle(personalized))}</span>
+        <div class="scenario-item-body">
+          <span class="scenario-item-title">${index + 1}. ${escapeHTML(getScenarioTitle(personalized))}</span>
+          <span class="scenario-item-meta">${escapeHTML(interfaceLabel)}</span>
+        </div>
         <span class="status-pill">${label}</span>
       </li>`;
     })
@@ -538,15 +552,33 @@ function renderSummaryCard() {
 
   return `
     <div class="app-card summary-card">
-      <h2>Training complete</h2>
-      <p>You correctly identified <strong>${correct}</strong> out of <strong>${total}</strong> scenarios (${percentage}%).</p>
-      <p>Incorrect: ${incorrect}</p>
-      <h3>Scenario Breakdown</h3>
-      <ul class="scenario-list">
-        ${resultsList}
-      </ul>
-      <div class="app-actions">
-        <button class="button button-primary" id="restart-training">Restart Training</button>
+      <div class="summary-hero">
+        <p class="summary-label">CodeSignal phishing quiz</p>
+        <h2>${heroTitle}</h2>
+        <p class="summary-lede">${heroCopy}</p>
+      </div>
+      <div class="summary-metrics">
+        <div class="metric-card">
+          <span class="metric-value">${scoreValue}</span>
+          <span class="metric-label">Score</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-value">${resultsLabel}</span>
+          <span class="metric-label">Accuracy</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-value">${missedLabel}</span>
+          <span class="metric-label">Missed</span>
+        </div>
+      </div>
+      <div class="summary-breakdown">
+        <h3>Scenario breakdown</h3>
+        <ul class="scenario-list">
+          ${resultsList}
+        </ul>
+      </div>
+      <div class="app-actions summary-actions">
+        <button class="button button-primary" id="restart-training">Restart quiz</button>
       </div>
     </div>
   `;
