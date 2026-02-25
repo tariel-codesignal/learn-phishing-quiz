@@ -16,6 +16,7 @@ try {
 }
 
 const DIST_DIR = path.join(__dirname, 'dist');
+const SCENARIOS_PATH = path.join(__dirname, 'client', 'scenarios.yaml');
 // Check if IS_PRODUCTION is set to true
 const isProduction = process.env.IS_PRODUCTION === 'true';
 // In production mode, dist directory must exist
@@ -126,6 +127,20 @@ const server = http.createServer((req, res) => {
   // Handle POST requests
   if (req.method === 'POST') {
     handlePostRequest(req, res, parsedUrl);
+    return;
+  }
+
+  // Serve scenario data for both dev and prod
+  if (req.method === 'GET' && parsedUrl.pathname === '/api/scenarios') {
+    try {
+      const yamlData = fs.readFileSync(SCENARIOS_PATH, 'utf8');
+      res.writeHead(200, { 'Content-Type': 'text/yaml' });
+      res.end(yamlData);
+    } catch (error) {
+      console.error('Failed to read scenarios.yaml:', error);
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end('Failed to load scenarios');
+    }
     return;
   }
 
