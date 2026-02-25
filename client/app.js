@@ -361,6 +361,37 @@ function getScenarioTitle(scenario) {
   return 'Scenario';
 }
 
+function getScenarioPromptCopy(scenario) {
+  switch (scenario.interface) {
+    case 'email':
+      if (scenario.subject) {
+        return `Inbox alert: ${scenario.subject}`;
+      }
+      return `You got a new email from ${scenario.sender_name || scenario.sender_email || 'a contact'}`;
+    case 'sms':
+      return `New text from ${scenario.sender_name || 'an unknown number'}`;
+    case 'slack':
+      if (scenario.channel) {
+        return `You were pinged in ${scenario.channel}`;
+      }
+      return `New Slack message from ${scenario.sender_name || 'a teammate'}`;
+    default:
+      return 'Incoming message';
+  }
+}
+
+function summarizeExplanation(text = '') {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return '';
+  }
+  const sentenceMatch = trimmed.match(/[^.!?]+[.!?]/);
+  if (sentenceMatch) {
+    return sentenceMatch[0].trim();
+  }
+  return trimmed;
+}
+
 function renderLoadingCard() {
   return `
     <div class="app-card">
@@ -468,24 +499,16 @@ function renderProgressRail() {
 
 function renderScenarioCard(scenario) {
   const personalizedScenario = personalizeScenario(scenario);
-  const { correct } = getScore();
+  const promptCopy = escapeHTML(getScenarioPromptCopy(personalizedScenario));
   return `
-    <div class="app-card">
+    <div class="app-card scenario-card">
       ${renderProgressRail()}
-      <div class="row-between">
-        <div class="quiz-meta">
-          <p class="body-small scenario-stage">${personalizedScenario.interface.toUpperCase()} SIMULATION</p>
-          <h2>${escapeHTML(getScenarioTitle(personalizedScenario))}</h2>
-          <p>Scenario ${state.currentIndex + 1} of ${state.scenarios.length}</p>
-        </div>
-        <span class="score-pill">Score: ${correct}/${state.scenarios.length}</span>
-      </div>
-      ${renderInterfaceShell(personalizedScenario)}
-      <p>Is this message a phishing attempt or a legitimate communication?</p>
-      <div class="app-actions">
+      <p class="scenario-prompt">${promptCopy}</p>
+      <div class="scenario-action-bar app-actions">
         <button class="button button-danger" id="btn-phishing">Phishing</button>
         <button class="button button-primary" id="btn-legit">Legit</button>
       </div>
+      ${renderInterfaceShell(personalizedScenario)}
     </div>
   `;
 }
@@ -496,36 +519,37 @@ function renderResultCard(scenario) {
     return '';
   }
   const personalizedScenario = personalizeScenario(scenario);
-  const correctLabel = scenario.is_phishing ? 'Phishing' : 'Legit';
-  const userLabel = lastAnswer.userAnswer === 'phishing' ? 'Phishing' : 'Legit';
-  const signalsHeading = scenario.is_phishing ? 'Red Flags' : 'Legitimacy Signals';
-  const heading = lastAnswer.isCorrect ? 'Correct - great catch!' : 'Not quite.';
-  const description = lastAnswer.isCorrect
-    ? 'You spotted the right cues.'
-    : 'Review the red flags so you can spot them next time.';
+  const heading = lastAnswer.isCorrect ? 'Correct!' : 'Not quite.';
   const isLastScenario = state.currentIndex === state.scenarios.length - 1;
+  const signals = Array.isArray(personalizedScenario.red_flags) ? personalizedScenario.red_flags : [];
+  const keySignals = signals
+    .map(flag => flag.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+  const signalsSummary = keySignals.length
+    ? keySignals.join(' • ')
+    : scenario.is_phishing
+      ? 'No obvious phishing cues listed.'
+      : 'No red flags noted in this scenario.';
+  const explanationSummary = summarizeExplanation(personalizedScenario.explanation || '');
+  const insightHeading = scenario.is_phishing ? "Why it's phishing" : "Why it's safe";
 
   return `
-    <div class="app-card">
+    <div class="app-card scenario-card result-card">
       ${renderProgressRail()}
-      <div class="result-callout">
+      <div class="result-callout" data-state="${lastAnswer.isCorrect ? 'correct' : 'incorrect'}">
         <h2>${heading}</h2>
-        <p>${description}</p>
-        <p><strong>Your answer:</strong> ${userLabel} | <strong>Correct answer:</strong> ${correctLabel}</p>
       </div>
-      ${renderInterfaceShell(personalizedScenario)}
-      <div>
-        <h3>${signalsHeading}</h3>
-        ${renderRedFlags(personalizedScenario.red_flags)}
+      <div class="result-insight">
+        <p class="insight-heading">${escapeHTML(insightHeading)}</p>
+        <p class="insight-signals">${escapeHTML(signalsSummary)}</p>
+        ${explanationSummary ? `<p class="insight-note">${escapeHTML(explanationSummary)}</p>` : ''}
       </div>
-      <div>
-        <h3>Explanation</h3>
-        <p>${escapeHTML(personalizedScenario.explanation || '')}</p>
-      </div>
-      <div class="app-actions">
-        <button class="button button-secondary" id="review-again">Review Scenario Again</button>
+      <div class="scenario-action-bar app-actions result-actions">
+        <button class="button button-secondary" id="review-again">Review Scenario</button>
         <button class="button button-primary" id="next-scenario">${isLastScenario ? 'View Final Score' : 'Next Scenario'}</button>
       </div>
+      ${renderInterfaceShell(personalizedScenario)}
     </div>
   `;
 }
@@ -564,14 +588,6 @@ function renderSummaryCard() {
   `;
 }
 
-function renderRedFlags(redFlags = []) {
-  if (!redFlags.length) {
-    return '<p>No red flags recorded.</p>';
-  }
-  const items = redFlags.map(flag => `<li>${escapeHTML(flag)}</li>`).join('');
-  return `<ul class="red-flags-list">${items}</ul>`;
-}
-
 function renderInterfaceShell(scenario) {
   switch (scenario.interface) {
     case 'email':
@@ -587,22 +603,21 @@ function renderInterfaceShell(scenario) {
 
 function renderEmailShell(scenario) {
   const recipientEmail = getProfileValue('email', 'you@company.com');
-  const recipientLabel = recipientEmail === 'you@company.com' ? 'me' : recipientEmail;
+  const recipientLabel = 'me';
   const avatarSeed = scenario.sender_name || scenario.sender_email || '?';
   const avatarInitial = avatarSeed.trim().charAt(0).toUpperCase() || '?';
   const avatarColor = getAvatarColor(avatarSeed);
-  const senderDomain = (scenario.sender_email || '').split('@')[1] || '';
-  const viaDomain = scenario.mailed_by && scenario.mailed_by !== senderDomain ? scenario.mailed_by : '';
-  const signedDomain = scenario.signed_by || '';
+  const senderEmailDisplay = scenario.sender_email || 'unknown@domain.com';
   const detailRows = [
     {
       label: 'from',
       value: `${scenario.sender_name || 'Unknown sender'} <${scenario.sender_email || 'unknown@domain.com'}>`
     },
     { label: 'to', value: recipientEmail },
-    { label: 'date', value: scenario.timestamp || '' }
+    { label: 'date', value: scenario.timestamp || '' },
+    { label: 'subject', value: scenario.subject || 'No subject' }
   ];
-  if (scenario.reply_to) {
+  if (scenario.reply_to && scenario.reply_to !== scenario.sender_email) {
     detailRows.push({ label: 'reply-to', value: scenario.reply_to });
   }
   if (scenario.mailed_by) {
@@ -611,6 +626,10 @@ function renderEmailShell(scenario) {
   if (scenario.signed_by) {
     detailRows.push({ label: 'signed-by', value: scenario.signed_by });
   }
+  if (scenario.mailing_list) {
+    detailRows.push({ label: 'mailing list', value: scenario.mailing_list });
+  }
+  detailRows.push({ label: 'security', value: scenario.security || 'Standard encryption (TLS)' });
   const detailMarkup = detailRows
     .map(row => `
       <div class="gmail-detail-row">
@@ -624,6 +643,7 @@ function renderEmailShell(scenario) {
   const toolbarButtons = gmailToolbarIcons
     .map(icon => `<button type="button" class="gmail-toolbar-btn" title="${escapeHTML(icon.label)}">${getToolbarIconSvg(icon.type)}</button>`)
     .join('');
+  const detailsId = `gmail-details-${escapeAttribute(scenario.id || 'email')}`;
   return `
     <div class="scenario-view email-shell gmail-shell">
       <div class="gmail-toolbar" aria-hidden="true">
@@ -640,30 +660,29 @@ function renderEmailShell(scenario) {
             </div>
           </div>
           <div class="gmail-sender-row">
-            <div class="gmail-avatar" style="background:${avatarColor};">${escapeHTML(avatarInitial)}</div>
-            <div class="gmail-sender-meta">
-              <div class="gmail-sender-line">
-                <strong>${escapeHTML(scenario.sender_name || 'Unknown sender')}</strong>
-                <span class="gmail-sender-email">&lt;${escapeHTML(scenario.sender_email || 'unknown@domain.com')}&gt;</span>
-                ${viaDomain ? `<span class="gmail-via-pill">via ${escapeHTML(viaDomain)}</span>` : ''}
-                ${signedDomain ? `<span class="gmail-auth-pill">signed-by ${escapeHTML(signedDomain)}</span>` : ''}
-                <span class="gmail-recipient">to ${escapeHTML(recipientLabel)}</span>
-                ${scenario.preview_badge ? `<span class="gmail-badge">${escapeHTML(scenario.preview_badge)}</span>` : ''}
-              </div>
-              <div class="gmail-meta-row">
-                <span class="gmail-timestamp">${escapeHTML(scenario.timestamp || '')}</span>
-                <div class="gmail-meta-actions" aria-hidden="true">
-                  <button type="button" class="gmail-icon-btn" title="Reply">${getToolbarIconSvg('reply')}</button>
-                  <button type="button" class="gmail-icon-btn" title="More">${getToolbarIconSvg('kebab')}</button>
+            <div class="gmail-sender-left">
+              <div class="gmail-avatar" style="background:${avatarColor};">${escapeHTML(avatarInitial)}</div>
+              <div class="gmail-sender-meta">
+                <div class="gmail-sender-line">
+                  <strong>${escapeHTML(scenario.sender_name || 'Unknown sender')}</strong>
+                  <span class="gmail-sender-email">&lt;${escapeHTML(senderEmailDisplay)}&gt;</span>
+                </div>
+                <div class="gmail-recipient-line">
+                  <button type="button" class="gmail-recipient-toggle email-details-toggle" title="Show details" aria-expanded="false" data-details-id="${detailsId}">
+                    to ${recipientLabel} <span class="toggle-arrow">▾</span>
+                  </button>
                 </div>
               </div>
             </div>
+            <div class="gmail-sender-right">
+              <span class="gmail-timestamp">${escapeHTML(scenario.timestamp || '')}</span>
+              <div class="gmail-meta-actions" aria-hidden="true">
+                <button type="button" class="gmail-icon-btn" title="Reply">${getToolbarIconSvg('reply')}</button>
+                <button type="button" class="gmail-icon-btn" title="More">${getToolbarIconSvg('kebab')}</button>
+              </div>
+            </div>
           </div>
-          <div class="gmail-header-details">
-            <button type="button" class="email-details-toggle" aria-expanded="false">
-              <span class="toggle-arrow">▾</span>
-              <span class="toggle-text">Show details</span>
-            </button>
+          <div id="${detailsId}" class="gmail-header-details">
             <div class="gmail-detail-grid">
               ${detailMarkup}
             </div>
@@ -930,16 +949,15 @@ function attachEventHandlers() {
 
   document.querySelectorAll('.email-details-toggle').forEach(toggle => {
     toggle.addEventListener('click', () => {
-      const container = toggle.closest('.gmail-header-details');
+      const detailsId = toggle.getAttribute('data-details-id');
+      const container = detailsId ? document.getElementById(detailsId) : toggle.closest('.gmail-header-details');
       if (!container) {
         return;
       }
-      const expanded = container.classList.toggle('expanded');
+      const expanded = !container.classList.contains('expanded');
+      container.classList.toggle('expanded', expanded);
       toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-      const text = toggle.querySelector('.toggle-text');
-      if (text) {
-        text.textContent = expanded ? 'Hide details' : 'Show details';
-      }
+      toggle.setAttribute('title', expanded ? 'Hide details' : 'Show details');
     });
   });
 }

@@ -4,7 +4,6 @@
   sender_email: service-security@corp-it-support.com
   subject: Immediate credential reset required
   timestamp: Mon, 22 Apr 2024 at 8:14 AM
-  preview_badge: External
   reply_to: harvester@suspicious-reset.ru
   mailed_by: bulk-mail.xyz
   signed_by: bulk-mail.xyz
@@ -35,7 +34,6 @@
   sender_email: priya.raman@company.com
   subject: Q2 product roadmap notes
   timestamp: Thu, 9 May 2024 at 4:42 PM
-  preview_badge: Internal
   mailed_by: mail.company.com
   signed_by: company.com
   doc_embed:
