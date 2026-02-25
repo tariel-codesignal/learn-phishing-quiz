@@ -308,7 +308,7 @@ function getToolbarIconSvg(type) {
 
 async function loadScenarios() {
   try {
-    const response = await fetch('./scenarios.yaml');
+    const response = await fetch('/api/scenarios');
     if (!response.ok) {
       throw new Error(`Failed to load scenarios: ${response.status}`);
     }
