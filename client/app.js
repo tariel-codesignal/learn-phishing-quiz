@@ -13,8 +13,8 @@ const state = {
   errorMessage: '',
   hasLoggedSummary: false,
   profile: {
-    name: '',
-    email: ''
+    name: 'learner',
+    email: 'learner@codesignal.com'
   },
   profileValidation: {
     name: '',
@@ -27,6 +27,31 @@ const selectors = {
   headerIndicator: () => document.getElementById('theme-indicator')
 };
 
+const landingIntros = [
+  {
+    headline: 'Can you spot the threats before they land?',
+    sub: 'New scenarios. Stay sharp.'
+  },
+  {
+    headline: 'Time to test your instincts.',
+    sub: 'Phishing attacks are getting smarter. Are you?'
+  },
+  {
+    headline: 'Another round. Threats are getting smarter.',
+    sub: 'Think you can spot them all this time?'
+  },
+  {
+    headline: 'Your next scenario set is ready.',
+    sub: 'Can you tell the real from the fake?'
+  },
+  {
+    headline: "Stay sharp. Attackers don't take breaks.",
+    sub: 'New scenarios are waiting.'
+  }
+];
+
+const selectedLandingIntro = landingIntros[Math.floor(Math.random() * landingIntros.length)];
+
 function escapeHTML(text = '') {
   return text
     .replace(/&/g, '&amp;')
@@ -36,8 +61,48 @@ function escapeHTML(text = '') {
     .replace(/'/g, '&#39;');
 }
 
+function decodeBasicEntities(value = '') {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
 function formatMultiline(text = '') {
   return escapeHTML(text).replace(/\n/g, '<br />');
+}
+
+function applyInlineMarkdown(text = '', options = {}) {
+  if (!text) {
+    return '';
+  }
+  const renderLink = typeof options.renderLink === 'function'
+    ? options.renderLink
+    : ((href, labelHTML) => `<a href="${href}" class="sim-link">${labelHTML}</a>`);
+  const placeholderStart = index => `%%MDLINKSTART${index}%%`;
+  const placeholderEnd = index => `%%MDLINKEND${index}%%`;
+  const links = [];
+  let working = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label, href) => {
+    const index = links.length;
+    links.push({ href: (href || '').trim() });
+    return `${placeholderStart(index)}${label}${placeholderEnd(index)}`;
+  });
+  let html = escapeHTML(working);
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/_(.+?)_/g, '<em>$1</em>');
+  links.forEach((link, index) => {
+    const startToken = placeholderStart(index);
+    const endToken = placeholderEnd(index);
+    const pattern = new RegExp(`${startToken}(.*?)${endToken}`, 'gs');
+    html = html.replace(pattern, (_placeholder, innerHTML) => {
+      const hrefValue = link.href || '#';
+      const safeHref = escapeAttribute(hrefValue);
+      return renderLink(safeHref, innerHTML);
+    });
+  });
+  return html;
 }
 
 function getProfileValue(key, fallback) {
@@ -137,16 +202,13 @@ function formatEmailBody(text = '') {
   }
   const blocks = text.split(/\n{2,}/).map(block => block.trim()).filter(Boolean);
   const transformInline = block => {
-    let html = escapeHTML(block);
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    html = html.replace(/_(.+?)_/g, '<em>$1</em>');
-    html = html.replace(/\[(.+?)\]\((.+?)\)/g, (_match, label, href) => {
-      const hrefValue = href.trim();
-      const safeHref = escapeAttribute(hrefValue);
-      const safeLabel = escapeHTML(label.trim());
-      return `<span class="gmail-link-wrap"><a href="${safeHref}" class="gmail-link" data-link-preview="${safeHref}">${safeLabel}</a></span>`;
+    const html = applyInlineMarkdown(block, {
+      renderLink: (href, labelHTML) => {
+        if (!href || href === '#') {
+          return `<span class="gmail-link-wrap"><a href="#" class="sim-link gmail-link">${labelHTML}</a></span>`;
+        }
+        return `<span class="gmail-link-wrap"><a href="${href}" class="sim-link gmail-link" data-link-preview="${href}">${labelHTML}</a></span>`;
+      }
     });
     return html.replace(/\n/g, '<br />');
   };
@@ -157,17 +219,31 @@ function formatSlackBody(text = '') {
   if (!text) {
     return '';
   }
-  let html = escapeHTML(text);
+  let html = applyInlineMarkdown(text, {
+    renderLink: (href, labelHTML) => `<a href="${href}" class="sim-link slack-link">${labelHTML}</a>`
+  });
   html = html.replace(/(^|\s)@([a-zA-Z0-9._-]+)/g, (_match, prefix, handle) => `${prefix}<span class="slack-mention">@${handle}</span>`);
+  const storedAnchors = [];
+  html = html.replace(/<a [^>]+?>[\s\S]*?<\/a>/g, match => {
+    const token = `%%SLACKANCHOR${storedAnchors.length}%%`;
+    storedAnchors.push(match);
+    return token;
+  });
   html = html.replace(/(https?:\/\/[^\s<]+)/g, url => {
-    const safeHref = escapeAttribute(url);
+    const decodedUrl = decodeBasicEntities(url);
+    const safeHref = escapeAttribute(decodedUrl);
     let hostname = 'link';
     try {
-      hostname = new URL(url).hostname.replace(/^www\./i, '');
+      hostname = new URL(decodedUrl).hostname.replace(/^www\./i, '');
     } catch (_error) {
       hostname = 'link';
     }
-    return `<a href="${safeHref}" class="slack-link" data-domain="${escapeAttribute(hostname)}">${escapeHTML(url)}</a>`;
+    const displayText = escapeHTML(decodedUrl);
+    return `<a href="${safeHref}" class="sim-link slack-link" data-domain="${escapeAttribute(hostname)}">${displayText}</a>`;
+  });
+  storedAnchors.forEach((markup, index) => {
+    const token = `%%SLACKANCHOR${index}%%`;
+    html = html.replace(token, markup);
   });
   return html.replace(/\n/g, '<br />');
 }
@@ -178,8 +254,9 @@ function formatSmsBody(text = '') {
   }
   let html = escapeHTML(text);
   html = html.replace(/(https?:\/\/[^\s<]+)/g, url => {
-    const safeHref = escapeAttribute(url);
-    return `<a href="${safeHref}" class="sms-link" data-link-preview="${safeHref}">${escapeHTML(url)}</a>`;
+    const decodedUrl = decodeBasicEntities(url);
+    const safeHref = escapeAttribute(decodedUrl);
+    return `<a href="${safeHref}" class="sim-link sms-link" data-link-preview="${safeHref}">${escapeHTML(decodedUrl)}</a>`;
   });
   return html.replace(/\n/g, '<br />');
 }
@@ -209,7 +286,7 @@ function renderSlackAttachment(attachment = {}) {
   return `
     <div class="slack-attachment">
       ${attachment.tag ? `<span class="slack-attachment-tag">${escapeHTML(attachment.tag)}</span>` : ''}
-      <a href="${escapeAttribute(attachment.url)}" class="slack-attachment-title">${escapeHTML(attachment.title)}</a>
+      <a href="${escapeAttribute(attachment.url)}" class="sim-link slack-attachment-title">${escapeHTML(attachment.title)}</a>
       ${attachment.description ? `<p>${escapeHTML(attachment.description)}</p>` : ''}
       ${domain ? `<span class="slack-attachment-domain">${escapeHTML(domain)}</span>` : ''}
     </div>
@@ -259,7 +336,7 @@ function renderDocEmbed(docEmbed = {}) {
       <div class="gmail-doc-icon ${iconClass}" aria-hidden="true"></div>
       <div class="gmail-doc-copy">
         <div class="gmail-doc-title">${docTitle}</div>
-        <a href="${docUrl}" class="gmail-doc-link" data-link-preview="${docUrl}">Open in ${iconLabel}</a>
+        <a href="${docUrl}" class="sim-link gmail-doc-link" data-link-preview="${docUrl}">Open in ${iconLabel}</a>
       </div>
     </div>
   `;
@@ -423,11 +500,12 @@ function renderWelcomeCard() {
   const emailError = state.profileValidation.email || '';
   const nameInputClass = `landing-input${nameError ? ' invalid' : ''}`;
   const emailInputClass = `landing-input${emailError ? ' invalid' : ''}`;
+  const introCopy = selectedLandingIntro || landingIntros[0];
   return `
     <div class="app-card welcome-hero">
       <div class="welcome-copy">
-        <h2 class="welcome-headline">Can you spot a phishing attack?</h2>
-        <p class="welcome-subtext">Phishing is the #1 cause of data breaches. Test yourself in ${scenarioLabel}.</p>
+        <h2 class="welcome-headline">${escapeHTML(introCopy.headline)}</h2>
+        <p class="welcome-subtext">${escapeHTML(introCopy.sub || `Phishing is the #1 cause of data breaches. Test yourself in ${scenarioLabel}.`)}</p>
       </div>
       <form id="quiz-intro-form" class="landing-form" novalidate>
         <input
@@ -435,7 +513,7 @@ function renderWelcomeCard() {
           id="participant-name"
           name="participant-name"
           class="${nameInputClass}"
-          placeholder="First name (e.g., Alex)"
+          placeholder="First name (e.g., Learner)"
           aria-label="First name"
           autocomplete="given-name"
           value="${nameValue}"
@@ -448,7 +526,7 @@ function renderWelcomeCard() {
           id="participant-email"
           name="participant-email"
           class="${emailInputClass}"
-          placeholder="Email (e.g., alex@example.com)"
+          placeholder="Email (e.g., learner@codesignal.com)"
           inputmode="email"
           aria-label="Email"
           autocomplete="email"
@@ -457,7 +535,7 @@ function renderWelcomeCard() {
           aria-invalid="${emailError ? 'true' : 'false'}"
         />
         ${emailError ? `<p class="landing-error" role="alert">${escapeHTML(emailError)}</p>` : ''}
-        <p class="landing-hint">Please enter your name and a valid email address to personalize the training scenarios.</p>
+        <p class="landing-hint">Used to personalize your scenarios.</p>
         <button class="button landing-cta" type="submit">Take the Quiz</button>
       </form>
     </div>
@@ -471,8 +549,8 @@ function renderScenarioCard(scenario) {
     <div class="app-card scenario-card">
       <p class="scenario-prompt">${promptCopy}</p>
       <div class="scenario-action-bar app-actions">
-        <button class="button button-danger" id="btn-phishing">Phishing</button>
-        <button class="button button-primary" id="btn-legit">Legit</button>
+        <button type="button" class="button button-danger" data-answer-choice="phishing">Phishing</button>
+        <button type="button" class="button button-primary" data-answer-choice="legit">Legit</button>
       </div>
       ${renderInterfaceShell(personalizedScenario)}
     </div>
@@ -879,14 +957,15 @@ function attachEventHandlers() {
     });
   }
 
-  const phishingBtn = document.getElementById('btn-phishing');
-  const legitBtn = document.getElementById('btn-legit');
-  if (phishingBtn) {
-    phishingBtn.addEventListener('click', () => handleAnswer('phishing'));
-  }
-  if (legitBtn) {
-    legitBtn.addEventListener('click', () => handleAnswer('legit'));
-  }
+  document.querySelectorAll('[data-answer-choice]').forEach(button => {
+    button.addEventListener('click', event => {
+      const choice = event.currentTarget?.getAttribute('data-answer-choice');
+      if (!choice || state.stage !== 'question') {
+        return;
+      }
+      handleAnswer(choice);
+    });
+  });
 
   const reviewBtn = document.getElementById('review-again');
   if (reviewBtn) {

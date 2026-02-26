@@ -144,7 +144,7 @@
   external_org: External org
   timestamp: 11:18 AM
   body: |
-    :warning: @{{name}}, expense policy update. We detected unmatched expenses in your card feed. Download the CSV here and respond within 1 hour -> https://slack-files-secure.s3-us-west-2.amazonaws-notreally.com
+    :warning: @{{name}}, expense policy update. We detected unmatched expenses in your card feed. Download the CSV [here](https://slack-files-secure.s3-us-west-2.amazonaws-notreally.com/expense-anomalies.csv) and respond within 1 hour.
   attachment:
     tag: file shared
     title: Expense anomalies.csv
