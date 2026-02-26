@@ -1,0 +1,77 @@
+Generate exactly ONE Slack scenario (interface: slack).
+
+Output rules:
+- Output only YAML.
+- YAML must be a list with exactly one item.
+- Use exactly the slack schema below.
+- Use professional enterprise tone.
+
+Slack schema:
+Required fields:
+- id
+- interface: slack
+- workspace
+- channel
+- sender_name
+- sender_handle
+- avatar_initials
+- timestamp
+- body
+- is_phishing
+- red_flags
+- explanation
+Optional fields:
+- channel_members
+- avatar_color
+- is_bot
+- verified_app
+- external_org
+- attachment: { tag, title, url, description }
+- reactions: [{ emoji, count, selected }]
+- thread_replies
+- thread_last_reply
+- edited
+
+Best practices:
+- Keep message behavior realistic for workplace chat.
+- Red flags must be concrete and observable.
+- Explanation should teach verification behavior.
+- Include learner name/email placeholders where relevant.
+
+Example:
+- id: slack-finance-file-share
+  interface: slack
+  workspace: Company HQ
+  channel: '#finance-alerts'
+  channel_members: 124
+  sender_name: Finance Automation
+  sender_handle: finance-bot
+  avatar_initials: FA
+  avatar_color: '#e01e5a'
+  is_bot: true
+  verified_app: false
+  external_org: External org
+  timestamp: 11:18 AM
+  body: |
+    @NAME_PLACEHOLDER please review and approve the variance export for EMAIL_PLACEHOLDER today:
+    https://company-finance-files-alert.net/variance-export.csv
+  attachment:
+    tag: file shared
+    title: variance-export.csv
+    url: https://company-finance-files-alert.net/variance-export.csv
+    description: Auto-generated variance file for immediate review.
+  reactions:
+    - emoji: "👀"
+      count: 2
+  thread_replies: 1
+  thread_last_reply: 3 minutes ago
+  edited: true
+  is_phishing: true
+  red_flags:
+    - Unverified bot with external organization badge.
+    - File link hosted on non-approved domain.
+    - Urgency and approval pressure without normal process context.
+  explanation: |
+    The message mimics internal automation but uses an untrusted host and identity signals inconsistent with approved finance tooling.
+
+Now generate one new slack scenario only.

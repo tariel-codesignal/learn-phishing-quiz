@@ -128,6 +128,7 @@ function resetQuizWithScenarios(nextScenarios = [], options = {}) {
   state.lastAnswer = null;
   state.errorMessage = '';
   state.profileValidation = { name: '', email: '' };
+  persistQuizResult(buildPendingQuizResultPayload(nextScenarios));
 }
 
 function formatEmailBody(text = '') {
@@ -1002,26 +1003,104 @@ function getScore() {
   };
 }
 
+function buildQuizResultPayload() {
+  const { total, correct } = getScore();
+  const incorrect = total - correct;
+  const passed = incorrect === 0 && total > 0;
+  const scenarios = state.scenarios.map((scenario, index) => {
+    const answer = state.answers[index];
+    return {
+      id: scenario.id,
+      user_answer: answer ? answer.userAnswer : null,
+      expected_answer: scenario.is_phishing ? 'phishing' : 'legit',
+      correct: answer ? answer.isCorrect : false
+    };
+  });
+  const incorrectScenarios = scenarios
+    .filter(item => !item.correct)
+    .map(item => item.id);
+  const correctScenarios = scenarios
+    .filter(item => item.correct)
+    .map(item => item.id);
+
+  return {
+    total,
+    correct,
+    incorrect,
+    passed,
+    completion_status: 'COMPLETED',
+    checker_result: passed ? 'PASS' : 'NOT_PASSING',
+    incorrect_scenarios: incorrectScenarios,
+    correct_scenarios: correctScenarios,
+    summary: {
+      correct_count: correct,
+      incorrect_count: incorrect,
+      correct_scenarios: correctScenarios,
+      incorrect_scenarios: incorrectScenarios
+    },
+    scenarios,
+    verdict: passed
+      ? 'All answers are correct. Solution is passing.'
+      : 'At least one answer is incorrect. Solution is not passing.',
+    generated_at: new Date().toISOString()
+  };
+}
+
+function buildPendingQuizResultPayload(scenarios = state.scenarios) {
+  const total = Array.isArray(scenarios) ? scenarios.length : 0;
+  const scenarioIds = (scenarios || []).map(scenario => scenario.id);
+  return {
+    total,
+    correct: 0,
+    incorrect: total,
+    passed: false,
+    checker_result: 'INCOMPLETE',
+    completion_status: 'NOT_COMPLETED',
+    incorrect_scenarios: [],
+    correct_scenarios: [],
+    summary: {
+      correct_count: 0,
+      incorrect_count: 0,
+      correct_scenarios: [],
+      incorrect_scenarios: [],
+      pending_scenarios: scenarioIds
+    },
+    scenarios: (scenarios || []).map(scenario => ({
+      id: scenario.id,
+      user_answer: null,
+      expected_answer: scenario.is_phishing ? 'phishing' : 'legit',
+      correct: false
+    })),
+    verdict: 'Learner has not completed the quiz yet.',
+    generated_at: new Date().toISOString()
+  };
+}
+
+async function persistQuizResult(payload) {
+  try {
+    const response = await fetch('/api/quiz-report', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Failed to persist quiz report (${response.status}): ${text}`);
+    }
+  } catch (error) {
+    console.error('Failed to save quiz report for checker:', error);
+  }
+}
+
 function logQuizResult() {
   if (state.hasLoggedSummary) {
     return;
   }
-  const { total, correct } = getScore();
-  const payload = {
-    total,
-    correct,
-    incorrect: total - correct,
-    scenarios: state.scenarios.map((scenario, index) => {
-      const answer = state.answers[index];
-      return {
-        id: scenario.id,
-        user_answer: answer ? answer.userAnswer : null,
-        correct: answer ? answer.isCorrect : false
-      };
-    }),
-    verdict: `User completed the phishing quiz with ${correct}/${total} correct answers.`
-  };
+  const payload = buildQuizResultPayload();
   console.log('QUIZ_RESULT: ' + JSON.stringify(payload, null, 2));
+  persistQuizResult(payload);
   state.hasLoggedSummary = true;
 }
 

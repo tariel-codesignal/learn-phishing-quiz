@@ -1,0 +1,14 @@
+Format RAW_SCENARIO into markdown using exactly this structure and nothing else:
+
+## Solution Code
+
+`solution.yaml`
+```yaml
+[RAW_SCENARIO]
+```
+
+Rules:
+- Keep header exactly: `## Solution Code`
+- Keep filename exactly: `solution.yaml`
+- Use fenced code language: `yaml`
+- No extra headers, notes, or text before/after

@@ -17,6 +17,7 @@ try {
 
 const DIST_DIR = path.join(__dirname, 'dist');
 const SCENARIOS_PATH = path.join(__dirname, 'client', 'scenarios.yaml');
+const QUIZ_REPORT_PATH = path.join(__dirname, 'ai-checker-report.json');
 // Check if IS_PRODUCTION is set to true
 const isProduction = process.env.IS_PRODUCTION === 'true';
 // In production mode, dist directory must exist
@@ -111,6 +112,34 @@ function handlePostRequest(req, res, parsedUrl) {
       } catch (error) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid JSON' }));
+      }
+    });
+  } else if (parsedUrl.pathname === '/api/quiz-report') {
+    let body = '';
+
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        const requiredFields = ['total', 'correct', 'incorrect', 'passed', 'checker_result', 'scenarios', 'verdict'];
+        const missingFields = requiredFields.filter(field => !(field in payload));
+
+        if (missingFields.length > 0) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Missing required fields: ${missingFields.join(', ')}` }));
+          return;
+        }
+
+        fs.writeFileSync(QUIZ_REPORT_PATH, JSON.stringify(payload, null, 2), 'utf8');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, path: path.basename(QUIZ_REPORT_PATH) }));
+      } catch (error) {
+        console.error('Failed to save quiz report:', error);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON payload for quiz report' }));
       }
     });
   } else {

@@ -1,0 +1,15 @@
+__TASK__
+
+Now provide a title for the example without using any headers, just the name of the title.
+
+Do not use any quotes, only provide the title that we should use for the lesson.
+
+Use CHANNEL_TYPE and GENERATED_SCENARIO to create a concise, professional title.
+
+__FORMAT__
+
+[The Title of the example]
+
+__EXAMPLE__
+
+The Title of the Task Example

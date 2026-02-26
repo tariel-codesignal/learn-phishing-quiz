@@ -1,0 +1,63 @@
+Generate exactly ONE Gmail-style scenario (interface: email).
+
+Output rules:
+- Output only YAML.
+- YAML must be a list with exactly one item.
+- Use exactly the email schema below.
+- Use professional enterprise tone.
+
+Email schema:
+Required fields:
+- id
+- interface: email
+- sender_name
+- sender_email
+- subject
+- timestamp
+- body
+- is_phishing
+- red_flags
+- explanation
+Optional fields:
+- preview_badge
+- reply_to
+- mailed_by
+- signed_by
+- doc_embed: { type, title, url }
+
+Best practices:
+- Body should be realistic and context-specific.
+- Keep red_flags specific and observable.
+- Keep explanation concise and instructional.
+- Include learner name/email placeholders where relevant.
+
+Example:
+- id: email-security-review
+  interface: email
+  sender_name: Security Operations
+  sender_email: sec-ops@company-security.com
+  subject: Security policy acknowledgment required
+  timestamp: Tue, 14 May 2024 at 9:08 AM
+  preview_badge: External
+  reply_to: mailbox-audit@alerts-mail.io
+  mailed_by: bulk-notify-security.net
+  signed_by: bulk-notify-security.net
+  body: |
+    Hi NAME_PLACEHOLDER,
+
+    We detected unusual sign-in behavior associated with EMAIL_PLACEHOLDER.
+    Please complete the policy acknowledgment in the secure portal below:
+
+    [security.google.com/policy/review](https://security-policy-review-center.net/login)
+
+    Regards,
+    Security Operations
+  is_phishing: true
+  red_flags:
+    - Sender domain does not match trusted internal domains.
+    - Display text of link does not match destination domain.
+    - Urgent security framing pushes immediate action.
+  explanation: |
+    This message imitates security operations but routes to an untrusted domain. Verify sender and destination before taking action.
+
+Now generate one new email scenario only.

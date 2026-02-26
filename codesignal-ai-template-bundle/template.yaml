@@ -1,0 +1,91 @@
+Template Type: task
+llm model: gpt-5.2-medium
+
+input:
+  - CHANNEL_TYPE # required: gmail | slack | sms
+  - EXTRA_CONTEXT # optional
+
+constants:
+  EMPTY_DESCRIPTION: ""
+
+Resources Write:
+  - TASK_TITLE
+  - DESCRIPTION
+  - SOLUTION_FILES
+
+variables:
+  - RAW_SCENARIO
+  - LAST_ANSWER
+
+Set Context:
+  type: initialMessage
+  name: Scenario Generator
+  system: phishing-scenario-generator-system
+  input:
+    - CHANNEL_TYPE
+    - EXTRA_CONTEXT
+  prompt: understand-context
+
+if (CHANNEL_TYPE == gmail):
+  type: condition
+  equal: gmail
+  input: CHANNEL_TYPE
+  RAW_SCENARIO = generate_gmail_scenario:
+    type: nextMessage
+    name: Scenario Generator
+    input:
+      - EXTRA_CONTEXT
+    prompt: generate-gmail-scenario
+    output: RAW_SCENARIO
+
+if (CHANNEL_TYPE == slack):
+  type: condition
+  equal: slack
+  input: CHANNEL_TYPE
+  RAW_SCENARIO = generate_slack_scenario:
+    type: nextMessage
+    name: Scenario Generator
+    input:
+      - EXTRA_CONTEXT
+    prompt: generate-slack-scenario
+    output: RAW_SCENARIO
+
+if (CHANNEL_TYPE == sms):
+  type: condition
+  equal: sms
+  input: CHANNEL_TYPE
+  RAW_SCENARIO = generate_sms_scenario:
+    type: nextMessage
+    name: Scenario Generator
+    input:
+      - EXTRA_CONTEXT
+    prompt: generate-sms-scenario
+    output: RAW_SCENARIO
+
+Provide Task Title:
+  type: nextMessage
+  name: Scenario Generator
+  input:
+    - CHANNEL_TYPE
+    - RAW_SCENARIO
+  output: TASK_TITLE
+  prompt: generate-task-title
+
+Format Solution Code:
+  type: nextMessage
+  name: Scenario Generator
+  input:
+    - RAW_SCENARIO
+  output: LAST_ANSWER
+  prompt: format-solution-code-yaml
+
+Parse Solution:
+  type: parseFiles
+  sectionTitle: Solution Code
+  input: LAST_ANSWER
+  output: SOLUTION_FILES
+
+DESCRIPTION = EMPTY_DESCRIPTION:
+  type: assign
+  input: EMPTY_DESCRIPTION
+  output: DESCRIPTION

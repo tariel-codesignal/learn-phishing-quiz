@@ -1,3 +1,41 @@
+- id: vendor-invoice-payment-change-request
+  interface: email
+  sender_name: "Alicia Grant | NorthBridge Supplies"
+  sender_email: "alicia.grant@northbridgesupplies-billing.com"
+  subject: "RE: April invoice payment — updated remittance details"
+  timestamp: Wed, 26 Feb 2026 at 10:14 AM
+  preview_badge: External
+  reply_to: "remittance@northbridge-supplies.com"
+  mailed_by: "mailservice-transactional.net"
+  signed_by: "northbridgesupplies-billing.com"
+  body: |
+    Hi {{name}},
+
+    Following up on the open April invoice. Our finance team has moved to a new remittance account and needs payments sent to the updated details effective immediately.
+
+    To avoid processing delays, please confirm the change for {{email}} and update the vendor record today using the form below:
+    [NorthBridge Remittance Update Form](https://northbridge-supplies.com.remit-update.center/vendor)
+
+    If you have already scheduled the payment, reply with the payment reference so we can reconcile it.
+
+    Thanks,
+    Alicia Grant
+    Accounts Receivable | NorthBridge Supplies
+    +1 (212) 555-0194
+  is_phishing: true
+  red_flags:
+    - Sender email domain "northbridgesupplies-billing.com" differs from the vendor brand domain referenced elsewhere ("northbridge-supplies.com").
+    - The link destination uses a deceptive subdomain pattern ("northbridge-supplies.com.remit-update.center") that is not the vendor’s real domain.
+    - Requests an urgent change to remittance/banking details, a common payment diversion tactic.
+    - Reply-To address differs from the From address, indicating the conversation could be redirected outside the apparent sender domain.
+    - Mailed-by domain is unrelated to the vendor, suggesting third-party bulk sending rather than normal vendor correspondence.
+  explanation: |
+    This email attempts to redirect payments by requesting an urgent remittance change and sending you to a lookalike domain. Validate vendor banking changes via established out-of-band contacts and approved vendor management processes before updating records or initiating payments.
+  doc_embed:
+    type: "form"
+    title: "NorthBridge Remittance Update"
+    url: "https://northbridge-supplies.com.remit-update.center/vendor"
+
 - id: email-credentials-reset
   interface: email
   sender_name: Alex @ IT Support

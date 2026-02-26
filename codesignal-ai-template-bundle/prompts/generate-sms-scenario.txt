@@ -1,0 +1,49 @@
+Generate exactly ONE SMS scenario (interface: sms).
+
+Output rules:
+- Output only YAML.
+- YAML must be a list with exactly one item.
+- Use exactly the sms schema below.
+- Use professional and realistic tone.
+
+SMS schema:
+Required fields:
+- id
+- interface: sms
+- sender_name
+- body
+- timestamp
+- is_phishing
+- red_flags
+- explanation
+Optional fields:
+- sender_number
+- carrier
+- thread_timestamp
+
+Best practices:
+- Keep SMS concise and believable.
+- Red flags should be practical checks a learner can do quickly.
+- Explanation should reinforce safe verification behavior.
+- Include learner name placeholder where relevant.
+
+Example:
+- id: sms-delivery-fee-notice
+  interface: sms
+  sender_name: Delivery Notice
+  sender_number: '+1 (415) 229-8831'
+  carrier: Text Message
+  thread_timestamp: Today 10:02 AM
+  body: |
+    Hi NAME_PLACEHOLDER, your parcel is on hold. Pay a $2.49 processing fee now:
+    https://parcel-release-center.net/pay
+  timestamp: 10:02 AM
+  is_phishing: true
+  red_flags:
+    - Unsolicited payment request with urgent deadline.
+    - Link domain is not an official carrier domain.
+    - Generic sender identity without verifiable context.
+  explanation: |
+    Legitimate carriers do not request small release fees via unsolicited SMS links. Verify directly through official apps or websites.
+
+Now generate one new sms scenario only.

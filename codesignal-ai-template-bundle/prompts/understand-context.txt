@@ -1,0 +1,12 @@
+Analyze request before generating.
+
+Inputs:
+- CHANNEL_TYPE
+- EXTRA_CONTEXT
+
+Task:
+- Infer the most relevant and realistic scenario pattern for CHANNEL_TYPE.
+- Apply EXTRA_CONTEXT if provided.
+- Keep output target: one scenario only, strict YAML list with one item.
+
+Do not output the scenario yet.
