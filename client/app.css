@@ -342,6 +342,12 @@
   color: #6b7280;
 }
 
+.scenario-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .status-pill {
   border-radius: 999px;
   padding: 0.25rem 1rem;

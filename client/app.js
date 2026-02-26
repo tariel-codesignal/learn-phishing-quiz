@@ -19,7 +19,8 @@ const state = {
   profileValidation: {
     name: '',
     email: ''
-  }
+  },
+  reviewingFromSummary: false
 };
 
 const selectors = {
@@ -193,6 +194,7 @@ function resetQuizWithScenarios(nextScenarios = [], options = {}) {
   state.lastAnswer = null;
   state.errorMessage = '';
   state.profileValidation = { name: '', email: '' };
+  state.reviewingFromSummary = false;
   persistQuizResult(buildPendingQuizResultPayload(nextScenarios));
 }
 
@@ -577,6 +579,9 @@ function renderResultCard(scenario) {
       : 'No red flags noted in this scenario.';
   const explanationSummary = summarizeExplanation(personalizedScenario.explanation || '');
   const insightHeading = scenario.is_phishing ? "Why it's phishing" : "Why it's safe";
+  const nextCtaLabel = state.reviewingFromSummary
+    ? 'Back to Summary'
+    : (isLastScenario ? 'View Final Score' : 'Next Scenario');
 
   return `
     <div class="app-card scenario-card result-card">
@@ -590,7 +595,7 @@ function renderResultCard(scenario) {
       </div>
       <div class="scenario-action-bar app-actions result-actions">
         <button class="button button-secondary" id="review-again">Review Scenario</button>
-        <button class="button button-primary" id="next-scenario">${isLastScenario ? 'View Final Score' : 'Next Scenario'}</button>
+        <button class="button button-primary" id="next-scenario">${nextCtaLabel}</button>
       </div>
       ${renderInterfaceShell(personalizedScenario)}
     </div>
@@ -619,12 +624,16 @@ function renderSummaryCard() {
       const statusClass = isCorrect ? 'correct' : 'incorrect';
       const label = isCorrect ? 'Correct' : 'Needs review';
       const interfaceLabel = (scenario.interface || '').toUpperCase();
+      const actionLabel = isCorrect ? 'Review' : 'Fix & review';
       return `<li class="scenario-item completed ${statusClass}">
         <div class="scenario-item-body">
           <span class="scenario-item-title">${index + 1}. ${escapeHTML(getScenarioTitle(personalized))}</span>
           <span class="scenario-item-meta">${escapeHTML(interfaceLabel)}</span>
         </div>
-        <span class="status-pill">${label}</span>
+        <div class="scenario-item-actions">
+          <span class="status-pill">${label}</span>
+          <button type="button" class="button button-text scenario-review-btn" data-review-index="${index}">${actionLabel}</button>
+        </div>
       </li>`;
     })
     .join('');
@@ -897,6 +906,7 @@ function renderApp() {
       markup = renderResultCard(state.scenarios[state.currentIndex]);
       break;
     case 'summary':
+      state.reviewingFromSummary = false;
       markup = renderSummaryCard();
       break;
     default:
@@ -979,7 +989,10 @@ function attachEventHandlers() {
   const nextBtn = document.getElementById('next-scenario');
   if (nextBtn) {
     nextBtn.addEventListener('click', () => {
-      if (state.currentIndex < state.scenarios.length - 1) {
+      if (state.reviewingFromSummary) {
+        state.stage = 'summary';
+        state.reviewingFromSummary = false;
+      } else if (state.currentIndex < state.scenarios.length - 1) {
         state.currentIndex += 1;
         state.stage = 'question';
       } else {
@@ -997,6 +1010,22 @@ function attachEventHandlers() {
       renderApp();
     });
   }
+
+  document.querySelectorAll('.scenario-review-btn[data-review-index]').forEach(button => {
+    button.addEventListener('click', event => {
+      const target = event.currentTarget;
+      const indexValue = target?.getAttribute('data-review-index');
+      const index = Number(indexValue);
+      if (Number.isNaN(index) || !state.scenarios[index]) {
+        return;
+      }
+      state.currentIndex = index;
+      state.stage = 'question';
+      state.lastAnswer = null;
+      state.reviewingFromSummary = true;
+      renderApp();
+    });
+  });
 
   document.querySelectorAll('.js-email-body a').forEach(link => {
     link.addEventListener('click', event => {
