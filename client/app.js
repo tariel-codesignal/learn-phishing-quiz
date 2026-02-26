@@ -986,6 +986,7 @@ function handleAnswer(choice) {
       correctAnswer
     };
     state.lastAnswer = { userAnswer: choice, isCorrect };
+    persistQuizResult(buildProgressQuizResultPayload());
     state.stage = 'result';
     renderApp();
   } catch (error) {
@@ -1003,47 +1004,65 @@ function getScore() {
   };
 }
 
-function buildQuizResultPayload() {
-  const { total, correct } = getScore();
-  const incorrect = total - correct;
-  const passed = incorrect === 0 && total > 0;
+function buildProgressQuizResultPayload() {
+  const total = state.scenarios.length;
+  const answeredEntries = state.answers.filter(Boolean);
+  const answered = answeredEntries.length;
+  const correct = answeredEntries.filter(entry => entry.isCorrect).length;
+  const incorrect = answeredEntries.filter(entry => entry.isCorrect === false).length;
+  const remaining = Math.max(total - answered, 0);
+  const completed = total > 0 && answered === total;
+  const passed = completed && incorrect === 0;
+
   const scenarios = state.scenarios.map((scenario, index) => {
     const answer = state.answers[index];
     return {
       id: scenario.id,
       user_answer: answer ? answer.userAnswer : null,
       expected_answer: scenario.is_phishing ? 'phishing' : 'legit',
-      correct: answer ? answer.isCorrect : false
+      correct: answer ? answer.isCorrect : null
     };
   });
-  const incorrectScenarios = scenarios
-    .filter(item => !item.correct)
-    .map(item => item.id);
-  const correctScenarios = scenarios
-    .filter(item => item.correct)
-    .map(item => item.id);
+
+  const correctScenarios = scenarios.filter(item => item.correct === true).map(item => item.id);
+  const incorrectScenarios = scenarios.filter(item => item.correct === false).map(item => item.id);
+  const pendingScenarios = scenarios.filter(item => item.user_answer === null).map(item => item.id);
+
+  let verdict = `Quiz in progress: ${answered}/${total} answered.`;
+  if (completed) {
+    verdict = passed
+      ? 'All answers are correct. Solution is passing.'
+      : 'At least one answer is incorrect. Solution is not passing.';
+  }
 
   return {
     total,
+    answered,
+    remaining,
     correct,
     incorrect,
     passed,
-    completion_status: 'COMPLETED',
-    checker_result: passed ? 'PASS' : 'NOT_PASSING',
+    completion_status: completed ? 'COMPLETED' : 'IN_PROGRESS',
+    checker_result: completed ? (passed ? 'PASS' : 'NOT_PASSING') : 'IN_PROGRESS',
     incorrect_scenarios: incorrectScenarios,
     correct_scenarios: correctScenarios,
     summary: {
       correct_count: correct,
       incorrect_count: incorrect,
+      answered_count: answered,
+      pending_count: remaining,
       correct_scenarios: correctScenarios,
-      incorrect_scenarios: incorrectScenarios
+      incorrect_scenarios: incorrectScenarios,
+      pending_scenarios: pendingScenarios
     },
     scenarios,
-    verdict: passed
-      ? 'All answers are correct. Solution is passing.'
-      : 'At least one answer is incorrect. Solution is not passing.',
+    verdict,
     generated_at: new Date().toISOString()
   };
+}
+
+function buildQuizResultPayload() {
+  return buildProgressQuizResultPayload();
 }
 
 function buildPendingQuizResultPayload(scenarios = state.scenarios) {
