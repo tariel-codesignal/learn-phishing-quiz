@@ -46,11 +46,6 @@
   text-align: center;
 }
 
-.header-help {
-  padding: 0.35rem 0.75rem;
-  color: #1a73e8;
-}
-
 .app-root[data-stage="welcome"] {
   display: flex;
   align-items: center;

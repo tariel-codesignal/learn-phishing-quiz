@@ -1,6 +1,6 @@
 # CodeSignal Phishing Quiz (Bespoke Simulation)
 
-This project delivers the CodeSignal phishing-awareness quiz on top of the Bespoke Simulation template. Learners review six realistic scenarios (email, Slack, and SMS) and label each one as **Phishing** or **Legit** while the UI mirrors familiar tools like Gmail, Slack, and iMessage. The repository keeps the template conventions but layers on the quiz logic, markdown formatting, and learner-facing help content described below.
+This project delivers the CodeSignal phishing-awareness quiz on top of the Bespoke Simulation template. Learners review six realistic scenarios (email, Slack, and SMS) and label each one as **Phishing** or **Legit** while the UI mirrors familiar tools like Gmail, Slack, and iMessage. The repository keeps the template conventions but layers on the quiz logic, markdown formatting, and summary review enhancements described below.
 
 ## Highlights
 
@@ -8,7 +8,6 @@ This project delivers the CodeSignal phishing-awareness quiz on top of the Bespo
 - **Rotating landing hero** – On every load the welcome headline/subheadline pair is picked from five threat-focused options. The form defaults to `learner` / `learner@codesignal.com` so players can start instantly.
 - **Interface accuracy** – Dedicated renderers emulate Gmail (headers, doc embeds, link preview strip), Slack (workspace chrome, badges, reactions), and SMS (iMessage frame).
 - **Safe inline markdown** – Email and Slack bodies run through a lightweight parser that supports `[links](url)`, `**bold**`, and `_italic_`. Links keep their true `href`, receive the `sim-link` class, and register `event.preventDefault()` so navigation never leaves the sim.
-- **Learner help modal** – `client/help-content.html` contains a learner-focused guide that explains the quiz flow, interface cues, and safe-link behavior. The header “Help” button opens this modal from any stage.
 - **Robust answer controls** – Phishing/Legit buttons use `type="button"` plus `data-answer-choice` attributes to ensure they remain clickable regardless of form context.
 
 ## Getting Started
@@ -49,17 +48,6 @@ After editing the YAML, restart the dev server or reload the page; the `/api/sce
 - SMS bodies remain escaped/plain-text but preserve line breaks.
 - Slack attachments and Gmail doc embeds also use `sim-link` and inherit the same safe-link behavior.
 
-## Help Modal Content
-
-`client/help-content.html` now contains learner-facing documentation that covers:
-- Overview of the quiz purpose and pre-filled profile fields.
-- Step-by-step instructions for landing, answering, reviewing, and restarting.
-- Interface-specific cues for Gmail, Slack, and SMS shells.
-- Formatting and safe-link explanations.
-- Practical tips + FAQ focused on learners (not developers).
-
-This file is fetched at runtime by `client/app.js` and is also bundled inside the release tarball so production builds always have access to the same guidance.
-
 ## Server & APIs
 
 `server.js` handles:
@@ -86,7 +74,6 @@ The GitHub Actions workflow `.github/workflows/build-release.yml` executes on ev
    - `server.js`
    - `node_modules/` (prod deps)
    - `client/scenarios.yaml`
-   - `client/help-content.html`
 4. Upload the tarball as a GitHub Release asset tagged `v${{github.run_number}}`.
 
 To deploy a release artifact manually:
@@ -102,6 +89,5 @@ cd app && npm run start:prod
 - **Landing flow** – reload a few times to confirm the headline/subheadline randomization and default form values.
 - **Markdown rendering** – use the first email and Slack scenarios to verify `[link]`, `**bold**`, and `_italic_` segments render correctly and do not navigate when clicked.
 - **Button reliability** – rapidly click Phishing/Legit to ensure the data attributes fire and the result screen appears without any form-submission side effects.
-- **Help modal** – open “Help” at different stages and skim the sections to confirm they speak to learners and match the latest UI behavior.
 
 For deeper template conventions or styling guidance, see `BESPOKE-TEMPLATE.md` and `AGENTS.md`.

@@ -1,8 +1,6 @@
 // app.js
-import Modal from './design-system/components/modal/modal.js';
 
 let websocket = null;
-let helpModal = null;
 
 const state = {
   scenarios: [],
@@ -1271,41 +1269,11 @@ function initializeWebSocket() {
   }
 }
 
-async function initializeHelpModal() {
-  try {
-    const response = await fetch('./help-content.html');
-    const helpContent = await response.text();
-
-    helpModal = Modal.createHelpModal({
-      title: 'Help / User Guide',
-      content: helpContent
-    });
-
-    const helpButton = document.getElementById('btn-help');
-    if (helpButton) {
-      helpButton.addEventListener('click', () => {
-        helpModal.open();
-      });
-    }
-  } catch (error) {
-    console.error('Failed to load help content:', error);
-    helpModal = Modal.createHelpModal({
-      title: 'Help / User Guide',
-      content: '<p>Help content could not be loaded. Please check that help-content.html exists.</p>'
-    });
-    const helpButton = document.getElementById('btn-help');
-    if (helpButton) {
-      helpButton.addEventListener('click', () => helpModal.open());
-    }
-  }
-}
-
 async function initialize() {
   const root = selectors.appRoot();
   if (root) {
     root.innerHTML = renderLoadingCard();
   }
-  await initializeHelpModal();
   await loadScenarios();
   renderApp();
   initializeWebSocket();
