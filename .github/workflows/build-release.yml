@@ -36,7 +36,7 @@ jobs:
 
       - name: Create release tarball
         run: |
-          tar -czf release.tar.gz dist/ package.json server.js node_modules/ client/scenarios.yaml
+          tar -czf release.tar.gz dist/ package.json server.js node_modules/ client/scenarios.yaml client/help-content.html
 
       - name: Upload build artifact (for workflow logs)
         uses: actions/upload-artifact@v4

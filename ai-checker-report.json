@@ -1,32 +1,21 @@
 {
   "total": 7,
-  "answered": 3,
-  "remaining": 4,
-  "correct": 1,
-  "incorrect": 2,
+  "correct": 0,
+  "incorrect": 7,
   "passed": false,
-  "completion_status": "IN_PROGRESS",
-  "checker_result": "IN_PROGRESS",
-  "incorrect_scenarios": [
-    "vendor-invoice-payment-change-request",
-    "email-credentials-reset"
-  ],
-  "correct_scenarios": [
-    "email-quarterly-update"
-  ],
+  "checker_result": "INCOMPLETE",
+  "completion_status": "NOT_COMPLETED",
+  "incorrect_scenarios": [],
+  "correct_scenarios": [],
   "summary": {
-    "correct_count": 1,
-    "incorrect_count": 2,
-    "answered_count": 3,
-    "pending_count": 4,
-    "correct_scenarios": [
-      "email-quarterly-update"
-    ],
-    "incorrect_scenarios": [
-      "vendor-invoice-payment-change-request",
-      "email-credentials-reset"
-    ],
+    "correct_count": 0,
+    "incorrect_count": 0,
+    "correct_scenarios": [],
+    "incorrect_scenarios": [],
     "pending_scenarios": [
+      "vendor-invoice-payment-change-request",
+      "email-credentials-reset",
+      "email-quarterly-update",
       "sms-package-fee",
       "sms-calendar-reminder",
       "slack-expense-warning",
@@ -36,47 +25,47 @@
   "scenarios": [
     {
       "id": "vendor-invoice-payment-change-request",
-      "user_answer": "legit",
+      "user_answer": null,
       "expected_answer": "phishing",
       "correct": false
     },
     {
       "id": "email-credentials-reset",
-      "user_answer": "legit",
+      "user_answer": null,
       "expected_answer": "phishing",
       "correct": false
     },
     {
       "id": "email-quarterly-update",
-      "user_answer": "legit",
+      "user_answer": null,
       "expected_answer": "legit",
-      "correct": true
+      "correct": false
     },
     {
       "id": "sms-package-fee",
       "user_answer": null,
       "expected_answer": "phishing",
-      "correct": null
+      "correct": false
     },
     {
       "id": "sms-calendar-reminder",
       "user_answer": null,
       "expected_answer": "legit",
-      "correct": null
+      "correct": false
     },
     {
       "id": "slack-expense-warning",
       "user_answer": null,
       "expected_answer": "phishing",
-      "correct": null
+      "correct": false
     },
     {
       "id": "slack-incident-report",
       "user_answer": null,
       "expected_answer": "legit",
-      "correct": null
+      "correct": false
     }
   ],
-  "verdict": "Quiz in progress: 3/7 answered.",
-  "generated_at": "2026-02-26T14:50:22.717Z"
+  "verdict": "Learner has not completed the quiz yet.",
+  "generated_at": "2026-02-26T16:19:57.818Z"
 }

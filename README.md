@@ -1,203 +1,107 @@
-# Bespoke Simulation Template
+# CodeSignal Phishing Quiz (Bespoke Simulation)
 
-This directory contains a template for creating embedded applications that share a consistent design system and user experience.
+This project delivers the CodeSignal phishing-awareness quiz on top of the Bespoke Simulation template. Learners review six realistic scenarios (email, Slack, and SMS) and label each one as **Phishing** or **Legit** while the UI mirrors familiar tools like Gmail, Slack, and iMessage. The repository keeps the template conventions but layers on the quiz logic, markdown formatting, and learner-facing help content described below.
 
-## Components
+## Highlights
 
-### 1. Design System Integration
-This template uses the CodeSignal Design System located in `client/design-system/`:
-- **Foundations**: Colors, spacing, typography tokens
-- **Components**: Buttons, boxes, inputs, dropdowns, tags
-- Light and dark theme support (automatic)
-- See the [design system repository](https://github.com/CodeSignal/learn_bespoke-design-system) for full documentation
+- **Scenario-driven content** – All copy, attachments, and metadata come from `client/scenarios.yaml`. Tokens such as `{{name}}` and `{{email}}` are personalized with the values provided on the landing form.
+- **Rotating landing hero** – On every load the welcome headline/subheadline pair is picked from five threat-focused options. The form defaults to `learner` / `learner@codesignal.com` so players can start instantly.
+- **Interface accuracy** – Dedicated renderers emulate Gmail (headers, doc embeds, link preview strip), Slack (workspace chrome, badges, reactions), and SMS (iMessage frame).
+- **Safe inline markdown** – Email and Slack bodies run through a lightweight parser that supports `[links](url)`, `**bold**`, and `_italic_`. Links keep their true `href`, receive the `sim-link` class, and register `event.preventDefault()` so navigation never leaves the sim.
+- **Learner help modal** – `client/help-content.html` contains a learner-focused guide that explains the quiz flow, interface cues, and safe-link behavior. The header “Help” button opens this modal from any stage.
+- **Robust answer controls** – Phishing/Legit buttons use `type="button"` plus `data-answer-choice` attributes to ensure they remain clickable regardless of form context.
 
-### 2. `client/bespoke-template.css`
-Template-specific CSS providing:
-- Layout components (header, sidebar, main-layout)
-- Utility classes (row, spacer)
-- Temporary components (modals, form elements) - will be replaced when design system adds them
-
-### 3. `client/index.html`
-A base HTML template that includes:
-- Navigation header with app name and help button
-- Main layout structure (sidebar + content area)
-- Help modal integration
-- Proper CSS and JavaScript loading
-
-### 4. `client/help-modal.js`
-A dependency-free JavaScript module for the help modal system:
-- Consistent modal behavior across all apps
-- Keyboard navigation (ESC to close)
-- Focus management
-- Custom event system
-
-### 5. `client/help-content-template.html`
-A template for creating consistent help content:
-- Table of contents navigation
-- Standardized section structure
-- FAQ with collapsible details
-- Image integration guidelines
-
-## Usage Instructions
-
-### Setting Up a New Application
-
-1. **Clone the repository**
-2. **Ensure the design-system submodule is initialized**:
-   ```bash
-   git submodule update --init --recursive
-   ```
-
-3. **Customize the HTML template** by replacing placeholders:
-   - `<!-- APP_TITLE -->` - Your application title
-   - `<!-- APP_NAME -->` - Your application name (appears in header)
-   - `<!-- APP_SPECIFIC_HEADER_CONTENT -->` - Any additional header elements
-   - `<!-- APP_SPECIFIC_MAIN_CONTENT -->` - Your main content area
-   - `<!-- APP_SPECIFIC_CSS -->` - Links to your app-specific CSS files
-   - `<!-- APP_SPECIFIC_SCRIPTS -->` - Links to your app-specific JavaScript files
-
-3. **Use Design System Components**
-   The template uses design system components directly. Use these classes:
-   - Buttons: `button button-primary`, `button button-secondary`, `button button-danger`, `button button-text`
-   - Boxes/Cards: `box card` for card containers
-   - Inputs: Add `input` class to input elements: `<input type="text" class="input" />`
-
-4. **Implement your application logic**. You can use Cursor or other agents for it. There is a file called `AGENTS.md` that contains context LLM can use.
-5. **Customise your help content** using the help content template
-3. **Use Design System Components**
-   The template uses design system components directly. Use these classes:
-   - Buttons: `button button-primary`, `button button-secondary`, `button button-danger`, `button button-text`
-   - Boxes/Cards: `box card` for card containers
-   - Inputs: Add `input` class to input elements: `<input type="text" class="input" />`
-
-4. **Implement your application logic**. You can use Cursor or other agents for it. There is a file called `AGENTS.md` that contains context LLM can use.
-5. **Customise your help content** using the help content template
-
-### Customizing Help Content
-
-Use the `help-content-template.html` as a starting point:
-
-1. **Replace placeholders** like `<!-- APP_NAME -->` with your actual content
-2. **Add sections** as needed for your application
-3. **Include images** by placing them in a `help/img/` directory
-4. **Use the provided structure** for consistency across applications
-
-
-### Help Modal API
-
-The `HelpModal` class provides several methods:
-
-```javascript
-// Initialize
-const modal = HelpModal.init({
-  triggerSelector: '#btn-help',
-  content: helpContent,
-  theme: 'auto'
-});
-
-// Update content dynamically
-modal.updateContent(newHelpContent);
-
-// Destroy the modal
-modal.destroy();
-```
-
-## Server
-
-This template includes a local development server (`server.js`) that provides:
-- Static file serving for your application
-- WebSocket support for real-time messaging
-- A REST API for triggering client-side alerts
-
-### Starting the Server
+## Getting Started
 
 ```bash
-# Local development
-npm run start:dev   # Vite + API for local development
-# Production
-npm run build       # Create production build in dist/
-npm run start:prod  # Serve built assets from dist/
+npm install        # install dependencies (includes Vite)
+npm start          # serve the production build with the Node server
+# or
+npm run dev        # start Vite dev server + API proxy for iterative work
 ```
 
+- The server listens on `http://localhost:3000` by default. `npm start` sets `IS_PRODUCTION=true`, forcing the server to serve from `dist/`.
+- During development, run `npm run dev` (Vite) in one terminal and `node server.js` (without `IS_PRODUCTION`) in another if you need the custom API endpoints.
 
-### Environment Variables
+## Scenario Authoring
 
-The server supports the following environment variables:
+Add or edit cases in `client/scenarios.yaml`:
 
-- **`PORT`** - Server port number
-  - Development: Can be set to any port (e.g., `PORT=3001`), defaulting to `3000`
-  - Production: Ignored (always `3000` when `IS_PRODUCTION=true`)
+- `interface`: `email`, `slack`, or `sms` controls which renderer runs.
+- Interface-specific fields include Gmail metadata (`sender_name`, `mailed_by`, doc embeds), Slack workspace data (`channel`, `attachments`, `reactions`), and SMS metadata (`sender_number`, `thread_timestamp`).
+- Use markdown inside `body` for links/bold/italic. Example: `[Security Center](https://corp-auth.com)`.
+- Personalization tokens (`{{name}}`, `{{email}}`) are replaced after profile validation; blanks fall back to `you` / `you@company.com` to keep sentences natural.
+- `red_flags` and `explanation` power the post-answer insights and summary panel.
 
-- **`IS_PRODUCTION`** - Enables production mode
-  - Set to `'true'` to enable production mode
-  - When enabled:
-    - Server serves static files from `dist/` directory
-    - Port is forced to `3000`
-    - Requires `dist/` directory to exist (throws error if missing)
+After editing the YAML, restart the dev server or reload the page; the `/api/scenarios` endpoint streams the file directly from disk in both dev and production modes.
 
+## Landing Experience & Personalization
 
-### Vite Build System
+- `state.profile` defaults to `learner` / `learner@codesignal.com`, so the “Take the Quiz” CTA works instantly.
+- Validation enforces non-empty name/email plus a basic email regex; inline errors render directly under each field.
+- Helper copy under the form reads “Used to personalize your scenarios.”
+- Clicking the header title resets the experience to the welcome card and clears any answers.
 
-This project uses [Vite](https://vitejs.dev/) as the build tool for fast development and optimized production builds.
+## Formatting & Link Handling
 
-#### Build Process
+- Inline markdown parser order: links → bold → italics. Links are temporarily replaced with placeholders to prevent nested replacements, then restored with sanitized `href` attributes and the `sim-link` class.
+- All anchors register a click handler that calls `event.preventDefault()` so the quiz never attempts to navigate away. Gmail-style hover/focus previews still show the true URL in the footer strip.
+- SMS bodies remain escaped/plain-text but preserve line breaks.
+- Slack attachments and Gmail doc embeds also use `sim-link` and inherit the same safe-link behavior.
 
-Running `npm run build` executes `vite build`, which:
-- Reads source files from the `client/` directory (configured in `vite.config.js`)
-- Processes and bundles JavaScript, CSS, and other assets
-- Outputs optimized production files to the `dist/` directory
-- Generates hashed filenames for cache busting
+## Help Modal Content
 
-### WebSocket Messaging API
+`client/help-content.html` now contains learner-facing documentation that covers:
+- Overview of the quiz purpose and pre-filled profile fields.
+- Step-by-step instructions for landing, answering, reviewing, and restarting.
+- Interface-specific cues for Gmail, Slack, and SMS shells.
+- Formatting and safe-link explanations.
+- Practical tips + FAQ focused on learners (not developers).
 
-The server provides a `POST /message` endpoint that allows you to send real-time messages to connected clients. This can be used to signal changes in the client during events like "Run" or "Submit". When a message is sent, the preview window with the application open will display an alert with the message.
+This file is fetched at runtime by `client/app.js` and is also bundled inside the release tarball so production builds always have access to the same guidance.
 
-It uses the `ws` package, so if you want to use it, install the packages (but this is optional).
+## Server & APIs
 
-```
-npm install
-```
+`server.js` handles:
+- Static asset serving (from `dist/` when `IS_PRODUCTION=true`).
+- `GET /api/scenarios` – streams `client/scenarios.yaml`.
+- `POST /api/quiz-report` – accepts the structured quiz summary; results are written to `ai-checker-report.json` for the AI validator.
+- `POST /message` – broadcasts JSON `{ "message": "..." }` payloads over WebSocket; install `ws` if you need live alerts.
+- WebSocket `/ws` endpoint for alerts displayed via `alert()` on the client.
 
-#### Endpoint: `POST /message`
+## Building & Releasing
 
-**Request Format:**
-```json
-{
-  "message": "Your message here"
-}
-```
-
-**Example using curl:**
 ```bash
-curl -X POST http://localhost:3000/message \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Hello from the server!"}'
+npm run build        # produces optimized assets in dist/
+npm ci --production  # (in CI) install only prod deps for packaging
 ```
 
-## CI/CD and Automated Releases
+The GitHub Actions workflow `.github/workflows/build-release.yml` executes on every push to `main`:
 
-This template includes a GitHub Actions workflow (`.github/workflows/build-release.yml`) that automatically builds and releases your application when you push to the `main` branch.
+1. Install dependencies and run `npm run build`.
+2. Re-install production-only dependencies (`npm ci --production`).
+3. Create `release.tar.gz` containing:
+   - `dist/`
+   - `package.json`
+   - `server.js`
+   - `node_modules/` (prod deps)
+   - `client/scenarios.yaml`
+   - `client/help-content.html`
+4. Upload the tarball as a GitHub Release asset tagged `v${{github.run_number}}`.
 
-### How It Works
+To deploy a release artifact manually:
 
-When you push to `main`, the workflow will:
+```bash
+wget <release-url>/release.tar.gz
+mkdir app && tar -xzf release.tar.gz -C app
+cd app && npm run start:prod
+```
 
-1. **Build the project** - Runs `npm run build` to create production assets in `dist/`
-2. **Create a release tarball** - Packages `dist/`, `package.json`, `server.js`, and production `node_modules/` into `release.tar.gz`
-3. **Create a GitHub Release** - Automatically creates a new release tagged as `v{run_number}` with the tarball attached
+## Testing & Manual Verification
 
-### Release Contents
+- **Landing flow** – reload a few times to confirm the headline/subheadline randomization and default form values.
+- **Markdown rendering** – use the first email and Slack scenarios to verify `[link]`, `**bold**`, and `_italic_` segments render correctly and do not navigate when clicked.
+- **Button reliability** – rapidly click Phishing/Legit to ensure the data attributes fire and the result screen appears without any form-submission side effects.
+- **Help modal** – open “Help” at different stages and skim the sections to confirm they speak to learners and match the latest UI behavior.
 
-The release tarball (`release.tar.gz`) contains everything needed to deploy the application:
-- `dist/` - Built production assets
-- `package.json` - Project dependencies and scripts
-- `server.js` - Production server
-- `node_modules/` - Production dependencies only
-
-### Using Releases
-
-To deploy a release:
-
-1. Download `release.tar.gz` from the latest GitHub Release (e.g. with `wget`)
-2. Extract (and remove) the tarball: `tar -xzf release.tar.gz && rm release.tar.gz`
-3. Start the production server: `npm run start:prod`
+For deeper template conventions or styling guidance, see `BESPOKE-TEMPLATE.md` and `AGENTS.md`.
