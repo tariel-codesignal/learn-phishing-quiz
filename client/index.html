@@ -27,15 +27,10 @@
   <link rel="stylesheet" href="./app.css" />
 </head>
 <body class="bespoke">
-  <!-- Navigation Header -->
-  <header class="header app-header">
-    <div class="header-section header-left">
-      <button type="button" class="header-title" id="header-home">CodeSignal Phishing Quiz</button>
-    </div>
-    <div class="header-section header-center">
-      <span class="header-progress" id="theme-indicator">Loading scenarios...</span>
-    </div>
-    <div class="header-section header-right"></div>
+  <!-- Quiz bar: sticky progress + verdict actions (banner intentionally removed) -->
+  <header class="quiz-bar" id="quiz-bar">
+    <span class="quiz-bar-progress" id="theme-indicator">Loading scenarios...</span>
+    <div class="quiz-bar-actions" id="quiz-bar-actions"></div>
   </header>
 
   <main class="main-layout">
@@ -44,8 +39,7 @@
     </section>
   </main>
 
-  <!-- Core Scripts -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+  <!-- Core Scripts (js-yaml is bundled into app.js by Vite - no CDN dependency) -->
   <script type="module" src="./app.js"></script>
 </body>
 </html>

@@ -59,8 +59,8 @@ This template provides:
 # Start development server
 npm start
 
-# Development mode (same as start)
-npm run dev
+# Development mode (Vite dev server + API server together)
+npm run start:dev
 ```
 
 ### WebSocket Messaging
@@ -76,6 +76,17 @@ curl -X POST http://localhost:3000/message \
 This sends alerts to connected clients. Requires `ws` package:
 ```bash
 npm install
+```
+
+### Quiz State for Evaluation
+
+`GET /snapshot` returns the graded state of the quiz as JSON. Grading is done in
+`server.js` against `is_phishing` in `client/scenarios.yaml`; the browser only
+reports which choice the learner made, so the snapshot cannot be spoofed from
+client state. The state is in-memory only - there is no report file on disk.
+
+```bash
+curl http://localhost:3000/snapshot
 ```
 
 ## Template Documentation

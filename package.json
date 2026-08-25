@@ -1,7 +1,7 @@
 {
-  "name": "bespoke-template",
+  "name": "learn_phishing",
   "version": "0.0.2",
-  "description": "Bespoke template with local development server and WebSocket messaging",
+  "description": "CodeSignal phishing-awareness quiz on the Bespoke Simulation template",
   "main": "server.js",
   "scripts": {
     "start": "npm run start:prod",
@@ -12,20 +12,20 @@
     "build": "vite build"
   },
   "keywords": [
+    "codesignal",
+    "phishing",
+    "quiz",
     "bespoke",
-    "template",
-    "development",
-    "server",
-    "websocket"
+    "simulation"
   ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "js-yaml": "^4.1.1",
-    "ws": "^8.14.2"
+    "js-yaml": "^5.4.0",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
-    "vite": "^7.2.4"
+    "vite": "^7.3.6"
   }
 }

@@ -1,6 +1,22 @@
 // app.js
 
+// Bundled by Vite so the sim never depends on a CDN reaching the learner's browser.
+import { load as loadYamlDocument } from 'js-yaml';
+
 let websocket = null;
+
+// Fixed persona for every learner - no form, no PII collection.
+const DEFAULT_PROFILE = {
+  name: 'Signalite',
+  email: 'signalite@codesignal.com'
+};
+
+const SNAPSHOT_DEBOUNCE_MS = 250;
+let snapshotTimer = null;
+
+const PROGRESS_STORAGE_KEY = 'codesignal-phishing-quiz-progress';
+const PROGRESS_STORAGE_VERSION = 1;
+const PERSISTED_STAGES = ['welcome', 'question', 'result', 'summary'];
 
 const state = {
   scenarios: [],
@@ -10,16 +26,57 @@ const state = {
   lastAnswer: null,
   errorMessage: '',
   hasLoggedSummary: false,
-  profile: {
-    name: 'learner',
-    email: 'learner@codesignal.com'
-  },
-  profileValidation: {
-    name: '',
-    email: ''
-  },
+  profile: { ...DEFAULT_PROFILE },
   reviewingFromSummary: false
 };
+
+// Answers live in memory, so without this a reload would lose the learner's progress
+// and republish a "not started" snapshot over a finished one.
+function getScenarioSignature(scenarios = []) {
+  return scenarios.map(scenario => scenario.id).join('|');
+}
+
+function saveProgress() {
+  try {
+    window.localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify({
+      version: PROGRESS_STORAGE_VERSION,
+      signature: getScenarioSignature(state.scenarios),
+      stage: state.stage,
+      currentIndex: state.currentIndex,
+      answers: state.answers.map(answer => (answer ? { userAnswer: answer.userAnswer } : null))
+    }));
+  } catch (error) {
+    // Disabled storage, private browsing, or quota exceeded: progress simply won't survive a reload.
+    console.warn('Unable to save quiz progress:', error);
+  }
+}
+
+function readSavedProgress(scenarios = []) {
+  try {
+    const raw = window.localStorage.getItem(PROGRESS_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const snapshot = JSON.parse(raw);
+    if (!snapshot || snapshot.version !== PROGRESS_STORAGE_VERSION) {
+      return null;
+    }
+    // Editing scenarios.yaml invalidates saved progress rather than restoring it onto the wrong quiz.
+    if (snapshot.signature !== getScenarioSignature(scenarios)) {
+      return null;
+    }
+    if (!Array.isArray(snapshot.answers) || snapshot.answers.length !== scenarios.length) {
+      return null;
+    }
+    if (!PERSISTED_STAGES.includes(snapshot.stage)) {
+      return null;
+    }
+    return snapshot;
+  } catch (error) {
+    console.warn('Unable to read saved quiz progress:', error);
+    return null;
+  }
+}
 
 const selectors = {
   appRoot: () => document.getElementById('app-root'),
@@ -109,37 +166,6 @@ function getProfileValue(key, fallback) {
   return value || fallback;
 }
 
-function isValidEmail(value = '') {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return false;
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(trimmed)) {
-    return false;
-  }
-  if (trimmed.includes('..')) {
-    return false;
-  }
-  const [, domain = ''] = trimmed.split('@');
-  if (domain.startsWith('.') || domain.endsWith('.')) {
-    return false;
-  }
-  return true;
-}
-
-function validateProfileInput(name = '', email = '') {
-  const nextErrors = { name: '', email: '' };
-  if (!name.trim()) {
-    nextErrors.name = 'Name is required.';
-  }
-  if (!email.trim()) {
-    nextErrors.email = 'Email is required.';
-  } else if (!isValidEmail(email)) {
-    nextErrors.email = 'Use a valid email format, like name@gmail.com.';
-  }
-  return nextErrors;
-}
-
 function personalizeText(text = '') {
   if (typeof text !== 'string') {
     return text;
@@ -191,9 +217,43 @@ function resetQuizWithScenarios(nextScenarios = [], options = {}) {
   state.currentIndex = 0;
   state.lastAnswer = null;
   state.errorMessage = '';
-  state.profileValidation = { name: '', email: '' };
   state.reviewingFromSummary = false;
-  persistQuizResult(buildPendingQuizResultPayload(nextScenarios));
+}
+
+function restoreQuizFromProgress(nextScenarios, snapshot) {
+  state.scenarios = nextScenarios;
+  // Grades are recomputed from scenarios.yaml rather than trusted from storage, so edited
+  // or stale localStorage can't fake a pass.
+  state.answers = nextScenarios.map((scenario, index) => {
+    const saved = snapshot.answers[index];
+    const userAnswer = saved && saved.userAnswer;
+    if (userAnswer !== 'phishing' && userAnswer !== 'legit') {
+      return null;
+    }
+    const correctAnswer = scenario.is_phishing ? 'phishing' : 'legit';
+    return {
+      id: scenario.id,
+      userAnswer,
+      isCorrect: userAnswer === correctAnswer,
+      correctAnswer
+    };
+  });
+
+  const lastIndex = Math.max(nextScenarios.length - 1, 0);
+  state.currentIndex = Number.isInteger(snapshot.currentIndex)
+    ? Math.min(Math.max(snapshot.currentIndex, 0), lastIndex)
+    : 0;
+
+  state.profile = { ...DEFAULT_PROFILE };
+  state.errorMessage = '';
+  state.reviewingFromSummary = false;
+  state.hasLoggedSummary = false;
+
+  const currentAnswer = state.answers[state.currentIndex];
+  state.stage = snapshot.stage === 'result' && !currentAnswer ? 'question' : snapshot.stage;
+  state.lastAnswer = state.stage === 'result' && currentAnswer
+    ? { userAnswer: currentAnswer.userAnswer, isCorrect: currentAnswer.isCorrect }
+    : null;
 }
 
 function formatEmailBody(text = '') {
@@ -215,11 +275,55 @@ function formatEmailBody(text = '') {
   return blocks.map(block => `<p>${transformInline(block)}</p>`).join('');
 }
 
+// Slack renders :shortcodes: as emoji; leaving them as literal text breaks immersion.
+const SLACK_EMOJI = {
+  warning: '\u26a0\ufe0f',
+  white_check_mark: '\u2705',
+  x: '\u274c',
+  eyes: '\ud83d\udc40',
+  tada: '\ud83c\udf89',
+  rotating_light: '\ud83d\udea8',
+  lock: '\ud83d\udd12',
+  unlock: '\ud83d\udd13',
+  link: '\ud83d\udd17',
+  memo: '\ud83d\udcdd',
+  '+1': '\ud83d\udc4d',
+  '-1': '\ud83d\udc4e',
+  thumbsup: '\ud83d\udc4d',
+  pray: '\ud83d\ude4f',
+  fire: '\ud83d\udd25',
+  bell: '\ud83d\udd14',
+  mega: '\ud83d\udce3',
+  calendar: '\ud83d\udcc5',
+  chart_with_upwards_trend: '\ud83d\udcc8',
+  moneybag: '\ud83d\udcb0',
+  credit_card: '\ud83d\udcb3',
+  page_facing_up: '\ud83d\udcc4',
+  paperclip: '\ud83d\udcce',
+  hourglass: '\u23f3',
+  alarm_clock: '\u23f0',
+  question: '\u2753',
+  exclamation: '\u2757',
+  point_right: '\ud83d\udc49',
+  wave: '\ud83d\udc4b',
+  raised_hands: '\ud83d\ude4c',
+  heavy_check_mark: '\u2714\ufe0f'
+};
+
+function replaceSlackEmoji(text = '') {
+  return text.replace(/:([a-z0-9_+-]+):/gi, (match, code) => SLACK_EMOJI[code.toLowerCase()] || match);
+}
+
+function isSlackDm(scenario = {}) {
+  const channel = (scenario.channel || '').trim();
+  return !channel || /^direct message/i.test(channel);
+}
+
 function formatSlackBody(text = '') {
   if (!text) {
     return '';
   }
-  let html = applyInlineMarkdown(text, {
+  let html = applyInlineMarkdown(replaceSlackEmoji(text), {
     renderLink: (href, labelHTML) => `<a href="${href}" class="sim-link slack-link">${labelHTML}</a>`
   });
   html = html.replace(/(^|\s)@([a-zA-Z0-9._-]+)/g, (_match, prefix, handle) => `${prefix}<span class="slack-mention">@${handle}</span>`);
@@ -391,15 +495,16 @@ async function loadScenarios() {
       throw new Error(`Failed to load scenarios: ${response.status}`);
     }
     const yamlText = await response.text();
-    const yamlLib = window.jsyaml;
-    if (!yamlLib || typeof yamlLib.load !== 'function') {
-      throw new Error('js-yaml library is not available.');
-    }
-    const parsed = yamlLib.load(yamlText);
+    const parsed = loadYamlDocument(yamlText);
     if (!Array.isArray(parsed)) {
       throw new Error('Scenario file must contain a list.');
     }
-    resetQuizWithScenarios(parsed);
+    const savedProgress = readSavedProgress(parsed);
+    if (savedProgress) {
+      restoreQuizFromProgress(parsed, savedProgress);
+    } else {
+      resetQuizWithScenarios(parsed);
+    }
   } catch (error) {
     console.error('Unable to load scenarios:', error);
     state.stage = 'error';
@@ -415,7 +520,7 @@ function updateHeaderStatus() {
     return;
   }
   if (state.stage === 'welcome') {
-    indicator.textContent = 'Enter your info to begin';
+    indicator.textContent = 'Ready when you are';
     return;
   }
   if (state.stage === 'summary') {
@@ -442,20 +547,34 @@ function getScenarioTitle(scenario) {
 function getScenarioPromptCopy(scenario) {
   switch (scenario.interface) {
     case 'email':
-      if (scenario.subject) {
-        return `Inbox alert: ${scenario.subject}`;
-      }
-      return `You got a new email from ${scenario.sender_name || scenario.sender_email || 'a contact'}`;
+      return 'A new email just landed in your inbox. Take a close look before you decide.';
     case 'sms':
-      return `New text from ${scenario.sender_name || 'an unknown number'}`;
+      return 'Your phone buzzed with a new text. Take a close look before you decide.';
     case 'slack':
-      if (scenario.channel) {
-        return `You were pinged in ${scenario.channel}`;
-      }
-      return `New Slack message from ${scenario.sender_name || 'a teammate'}`;
+      return isSlackDm(scenario)
+        ? 'A new direct message just came in on Slack. Take a close look before you decide.'
+        : `A new message just landed in ${scenario.channel}. Take a close look before you decide.`;
+    default:
+      return 'You have an incoming message. Take a close look before you decide.';
+  }
+}
+
+function getScenarioLedeLabel(scenario) {
+  switch (scenario.interface) {
+    case 'email':
+      return 'New email';
+    case 'sms':
+      return 'New text message';
+    case 'slack':
+      return 'New Slack message';
     default:
       return 'Incoming message';
   }
+}
+
+// The intro is task config: scenarios.yaml can set `intro:` per scenario ({{name}} tokens work).
+function getScenarioIntro(scenario) {
+  return scenario.intro || getScenarioPromptCopy(scenario);
 }
 
 function summarizeExplanation(text = '') {
@@ -494,12 +613,6 @@ function renderErrorCard(message) {
 function renderWelcomeCard() {
   const scenarioCount = state.scenarios.length || 0;
   const scenarioLabel = scenarioCount ? `${scenarioCount} quick scenarios` : 'a quick set of scenarios';
-  const nameValue = escapeHTML(state.profile.name || '');
-  const emailValue = escapeHTML(state.profile.email || '');
-  const nameError = state.profileValidation.name || '';
-  const emailError = state.profileValidation.email || '';
-  const nameInputClass = `landing-input${nameError ? ' invalid' : ''}`;
-  const emailInputClass = `landing-input${emailError ? ' invalid' : ''}`;
   const introCopy = selectedLandingIntro || landingIntros[0];
   return `
     <div class="app-card welcome-hero">
@@ -508,34 +621,6 @@ function renderWelcomeCard() {
         <p class="welcome-subtext">${escapeHTML(introCopy.sub || `Phishing is the #1 cause of data breaches. Test yourself in ${scenarioLabel}.`)}</p>
       </div>
       <form id="quiz-intro-form" class="landing-form" novalidate>
-        <input
-          type="text"
-          id="participant-name"
-          name="participant-name"
-          class="${nameInputClass}"
-          placeholder="First name (e.g., Learner)"
-          aria-label="First name"
-          autocomplete="given-name"
-          value="${nameValue}"
-          required
-          aria-invalid="${nameError ? 'true' : 'false'}"
-        />
-        ${nameError ? `<p class="landing-error" role="alert">${escapeHTML(nameError)}</p>` : ''}
-        <input
-          type="email"
-          id="participant-email"
-          name="participant-email"
-          class="${emailInputClass}"
-          placeholder="Email (e.g., learner@codesignal.com)"
-          inputmode="email"
-          aria-label="Email"
-          autocomplete="email"
-          value="${emailValue}"
-          required
-          aria-invalid="${emailError ? 'true' : 'false'}"
-        />
-        ${emailError ? `<p class="landing-error" role="alert">${escapeHTML(emailError)}</p>` : ''}
-        <p class="landing-hint">Used to personalize your scenarios.</p>
         <button class="button landing-cta" type="submit">Take the Quiz</button>
       </form>
     </div>
@@ -544,13 +629,12 @@ function renderWelcomeCard() {
 
 function renderScenarioCard(scenario) {
   const personalizedScenario = personalizeScenario(scenario);
-  const promptCopy = escapeHTML(getScenarioPromptCopy(personalizedScenario));
   return `
     <div class="app-card scenario-card">
-      <p class="scenario-prompt">${promptCopy}</p>
-      <div class="scenario-action-bar app-actions">
-        <button type="button" class="button button-danger" data-answer-choice="phishing">Phishing</button>
-        <button type="button" class="button button-primary" data-answer-choice="legit">Legit</button>
+      <div class="scenario-lede" data-state="intro">
+        <p class="lede-heading">${escapeHTML(getScenarioLedeLabel(personalizedScenario))}</p>
+        <p class="lede-body">${escapeHTML(getScenarioIntro(personalizedScenario))}</p>
+        <p class="lede-note">Phishing or legit? Answer in the bar above.</p>
       </div>
       ${renderInterfaceShell(personalizedScenario)}
     </div>
@@ -564,7 +648,6 @@ function renderResultCard(scenario) {
   }
   const personalizedScenario = personalizeScenario(scenario);
   const heading = lastAnswer.isCorrect ? 'Correct!' : 'Not quite.';
-  const isLastScenario = state.currentIndex === state.scenarios.length - 1;
   const signals = Array.isArray(personalizedScenario.red_flags) ? personalizedScenario.red_flags : [];
   const keySignals = signals
     .map(flag => flag.trim())
@@ -577,23 +660,12 @@ function renderResultCard(scenario) {
       : 'No red flags noted in this scenario.';
   const explanationSummary = summarizeExplanation(personalizedScenario.explanation || '');
   const insightHeading = scenario.is_phishing ? "Why it's phishing" : "Why it's safe";
-  const nextCtaLabel = state.reviewingFromSummary
-    ? 'Back to Summary'
-    : (isLastScenario ? 'View Final Score' : 'Next Scenario');
-
   return `
     <div class="app-card scenario-card result-card">
-      <div class="result-callout" data-state="${lastAnswer.isCorrect ? 'correct' : 'incorrect'}">
-        <h2>${heading}</h2>
-      </div>
-      <div class="result-insight">
-        <p class="insight-heading">${escapeHTML(insightHeading)}</p>
-        <p class="insight-signals">${escapeHTML(signalsSummary)}</p>
-        ${explanationSummary ? `<p class="insight-note">${escapeHTML(explanationSummary)}</p>` : ''}
-      </div>
-      <div class="scenario-action-bar app-actions result-actions">
-        <button class="button button-secondary" id="review-again">Review Scenario</button>
-        <button class="button button-primary" id="next-scenario">${nextCtaLabel}</button>
+      <div class="scenario-lede" data-state="${lastAnswer.isCorrect ? 'correct' : 'incorrect'}">
+        <p class="lede-heading">${heading} \u00b7 ${escapeHTML(insightHeading)}</p>
+        <p class="lede-body">${escapeHTML(signalsSummary)}</p>
+        ${explanationSummary ? `<p class="lede-note">${escapeHTML(explanationSummary)}</p>` : ''}
       </div>
       ${renderInterfaceShell(personalizedScenario)}
     </div>
@@ -726,15 +798,31 @@ function renderEmailShell(scenario) {
     .map(icon => `<button type="button" class="gmail-toolbar-btn" title="${escapeHTML(icon.label)}">${getToolbarIconSvg(icon.type)}</button>`)
     .join('');
   const detailsId = `gmail-details-${escapeAttribute(scenario.id || 'email')}`;
+  const learnerInitial = (getProfileValue('name', 'L').trim().charAt(0) || 'L').toUpperCase();
   return `
     <div class="scenario-view email-shell gmail-shell">
+      <div class="gmail-appbar" aria-hidden="true">
+        <span class="gmail-appbar-left">
+          <svg class="gmail-hamburger" viewBox="0 0 24 24" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line><line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line><line x1="4" y1="17" x2="20" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line></svg>
+          <svg class="gmail-logo" viewBox="0 0 32 24" aria-hidden="true"><path d="M2 6v13a2 2 0 0 0 2 2h3V11l9 6.5L25 11v10h3a2 2 0 0 0 2-2V6" fill="none"></path><path d="M2 6a2 2 0 0 1 3.2-1.6L16 12.5 26.8 4.4A2 2 0 0 1 30 6l-14 10.5z" fill="#ea4335"></path><path d="M2 6v13a2 2 0 0 0 2 2h3V11z" fill="#4285f4"></path><path d="M30 6v13a2 2 0 0 1-2 2h-3V11z" fill="#34a853"></path><path d="M7 11 2 6a2 2 0 0 1 3.2-1.6L7 5.8z" fill="#c5221f"></path><path d="M25 11l5-5a2 2 0 0 0-3.2-1.6L25 5.8z" fill="#fbbc04"></path></svg>
+          <span class="gmail-wordmark">Gmail</span>
+        </span>
+        <span class="gmail-search">
+          <svg class="gmail-search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" fill="none" stroke="currentColor" stroke-width="1.8"></circle><line x1="15.5" y1="15.5" x2="20" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></line></svg>
+          <span class="gmail-search-text">Search mail</span>
+        </span>
+        <span class="gmail-appbar-right">
+          <svg class="gmail-gear" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.8 1.8M16.7 16.7l1.8 1.8M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>
+          <span class="gmail-user-avatar">${escapeHTML(learnerInitial)}</span>
+        </span>
+      </div>
       <div class="gmail-toolbar" aria-hidden="true">
         ${toolbarButtons}
       </div>
       <div class="gmail-email">
         <div class="gmail-header">
           <div class="gmail-subject-row">
-            <h2 class="gmail-subject">${escapeHTML(scenario.subject || 'No subject')}</h2>
+            <h2 class="gmail-subject">${escapeHTML(scenario.subject || 'No subject')} <span class="gmail-label-chips" aria-hidden="true"><span class="gmail-label-chip">Inbox</span><span class="gmail-label-chip">External</span></span></h2>
             <div class="gmail-subject-actions" aria-hidden="true">
               <button type="button" class="gmail-icon-btn" title="Star">${getToolbarIconSvg('star')}</button>
               <button type="button" class="gmail-icon-btn" title="Print">${getToolbarIconSvg('print')}</button>
@@ -789,32 +877,103 @@ function renderSmsShell(scenario) {
   const smsMeta = getSmsMeta(scenario);
   const messageTime = scenario.timestamp || '';
   const threadTimestamp = scenario.thread_timestamp || 'Today';
-  const senderLabel = smsMeta.senderNumber
-    ? `${smsMeta.sender} (${smsMeta.senderNumber})`
-    : smsMeta.sender;
+  const contactInitials = smsMeta.sender
+    .split(/\s+/)
+    .map(word => word.charAt(0))
+    .join('')
+    .substring(0, 2)
+    .toUpperCase() || '?';
+  // iOS shows "Text Message · Today 10:02 AM" centered above SMS threads
+  const threadCaption = `${smsMeta.carrier} \u00b7 ${threadTimestamp}`;
   return `
     <div class="scenario-view sms-shell">
-      <div class="sms-phone-frame">
-        <div class="sms-topbar" aria-hidden="true">
-          <span class="sms-top-action">Messages</span>
-          <div class="sms-contact-meta">
-            <strong>${escapeHTML(senderLabel)}</strong>
-            <span>${escapeHTML(smsMeta.carrier)}</span>
-          </div>
-          <span class="sms-top-action">Details</span>
+      <div class="sms-phone-wrap">
+        <span class="sms-side-btn sms-btn-action" aria-hidden="true"></span>
+        <span class="sms-side-btn sms-btn-vol-up" aria-hidden="true"></span>
+        <span class="sms-side-btn sms-btn-vol-down" aria-hidden="true"></span>
+        <span class="sms-side-btn sms-btn-power" aria-hidden="true"></span>
+        <div class="sms-phone-frame">
+        <div class="sms-statusbar" aria-hidden="true">
+          <span class="sms-status-time">9:41</span>
+          <span class="sms-dynamic-island"></span>
+          <span class="sms-status-icons">
+            <svg class="sms-status-icon" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="0.8" fill="currentColor"></rect><rect x="5" y="5.5" width="3" height="6.5" rx="0.8" fill="currentColor"></rect><rect x="10" y="3" width="3" height="9" rx="0.8" fill="currentColor"></rect><rect x="15" y="0.5" width="3" height="11.5" rx="0.8" fill="currentColor" opacity="0.35"></rect></svg>
+            <svg class="sms-status-icon" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 9.6a1.7 1.7 0 0 1 1.7 1.7L8 12l-1.7-.7A1.7 1.7 0 0 1 8 9.6zM4.6 8a5 5 0 0 1 6.8 0l-1.4 1.4a3 3 0 0 0-4 0zM1.4 4.8a9.5 9.5 0 0 1 13.2 0l-1.4 1.4a7.5 7.5 0 0 0-10.4 0z" fill="currentColor"></path></svg>
+            <svg class="sms-status-icon sms-battery" viewBox="0 0 25 12" aria-hidden="true"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="currentColor" opacity="0.5"></rect><rect x="2" y="2" width="15" height="8" rx="1.6" fill="currentColor"></rect><path d="M23.5 4v4a2.2 2.2 0 0 0 0-4z" fill="currentColor" opacity="0.5"></path></svg>
+          </span>
+        </div>
+        <div class="sms-header" aria-hidden="true">
+          <span class="sms-back">
+            <svg viewBox="0 0 12 20" class="sms-back-chevron" aria-hidden="true"><polyline points="10 2 3 10 10 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+          </span>
+          <span class="sms-contact">
+            <span class="sms-contact-avatar">${escapeHTML(contactInitials)}</span>
+            <span class="sms-contact-name">${escapeHTML(smsMeta.sender)} <span class="sms-contact-chevron">\u203a</span></span>
+            ${smsMeta.senderNumber ? `<span class="sms-contact-number">${escapeHTML(smsMeta.senderNumber)}</span>` : ''}
+          </span>
+          <span class="sms-header-spacer"></span>
         </div>
         <div class="sms-thread">
-          <div class="sms-thread-timestamp">${escapeHTML(threadTimestamp)}</div>
+          <div class="sms-thread-timestamp">${escapeHTML(threadCaption)}</div>
           <div class="sms-message-row incoming">
             <div class="sms-bubble sender js-sms-body">${formatSmsBody(scenario.body || '')}</div>
           </div>
           ${messageTime ? `<div class="sms-delivery-time">${escapeHTML(messageTime)}</div>` : ''}
         </div>
         <div class="sms-composer" aria-hidden="true">
-          <span class="sms-compose-placeholder">iMessage</span>
-          <button type="button" class="sms-send-button">↑</button>
+          <span class="sms-compose-plus">
+            <svg viewBox="0 0 20 20" class="sms-plus-icon" aria-hidden="true"><line x1="10" y1="4.5" x2="10" y2="15.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></line><line x1="4.5" y1="10" x2="15.5" y2="10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></line></svg>
+          </span>
+          <span class="sms-compose-placeholder">${escapeHTML(smsMeta.carrier)} \u00b7 SMS</span>
+          <button type="button" class="sms-send-button">\u2191</button>
+        </div>
+          <div class="sms-home-indicator" aria-hidden="true"></div>
         </div>
       </div>
+    </div>
+  `;
+}
+
+function getSlackIconSvg(type) {
+  const a = 'class="slack-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"';
+  switch (type) {
+    case 'compose':
+      return `<svg ${a}><path d="M13.6 3.2 16.8 6.4 8 15.2l-4 .8.8-4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg>`;
+    case 'threads':
+      return `<svg ${a}><path d="M4 4h12v9H8l-4 3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg>`;
+    case 'drafts':
+      return `<svg ${a}><path d="M3 10.5 17 4l-4.5 13-3-5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg>`;
+    case 'person':
+      return `<svg ${a}><circle cx="10" cy="7" r="3" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M4.5 16c.8-2.6 2.9-4 5.5-4s4.7 1.4 5.5 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>`;
+    case 'search':
+      return `<svg ${a}><circle cx="9" cy="9" r="5" fill="none" stroke="currentColor" stroke-width="1.6"></circle><line x1="13" y1="13" x2="17" y2="17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></line></svg>`;
+    case 'info':
+      return `<svg ${a}><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="1.5"></circle><line x1="10" y1="9" x2="10" y2="14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></line><circle cx="10" cy="6.2" r="0.9" fill="currentColor"></circle></svg>`;
+    case 'emoji-add':
+      return `<svg ${a}><circle cx="9" cy="10" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4"></circle><path d="M6.8 11.2c.5.9 1.3 1.4 2.2 1.4s1.7-.5 2.2-1.4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"></path><circle cx="7.3" cy="8.7" r="0.7" fill="currentColor"></circle><circle cx="10.7" cy="8.7" r="0.7" fill="currentColor"></circle><line x1="15.5" y1="3" x2="15.5" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></line><line x1="13" y1="5.5" x2="18" y2="5.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></line></svg>`;
+    case 'share':
+      return `<svg ${a}><path d="M11 5.5 15.5 10 11 14.5v-3C7 11.5 5 13 4 15.5c0-4.5 2.5-7 7-7z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path></svg>`;
+    case 'bookmark':
+      return `<svg ${a}><path d="M6 3.5h8V17l-4-3-4 3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg>`;
+    case 'kebab':
+      return `<svg ${a}><circle cx="10" cy="4.5" r="1.2" fill="currentColor"></circle><circle cx="10" cy="10" r="1.2" fill="currentColor"></circle><circle cx="10" cy="15.5" r="1.2" fill="currentColor"></circle></svg>`;
+    case 'plus':
+      return `<svg ${a}><line x1="10" y1="5" x2="10" y2="15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></line><line x1="5" y1="10" x2="15" y2="10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></line></svg>`;
+    case 'send':
+      return `<svg ${a}><path d="M3 10 17 3.5 13 16.5l-3.5-4z" fill="currentColor"></path></svg>`;
+    default:
+      return '';
+  }
+}
+
+function renderSlackHoverBar() {
+  return `
+    <div class="slack-hover-bar" aria-hidden="true">
+      <button type="button" title="Add reaction">${getSlackIconSvg('emoji-add')}</button>
+      <button type="button" title="Reply in thread">${getSlackIconSvg('threads')}</button>
+      <button type="button" title="Forward">${getSlackIconSvg('share')}</button>
+      <button type="button" title="Save for later">${getSlackIconSvg('bookmark')}</button>
+      <button type="button" title="More actions">${getSlackIconSvg('kebab')}</button>
     </div>
   `;
 }
@@ -822,7 +981,8 @@ function renderSmsShell(scenario) {
 function renderSlackShell(scenario) {
   const initials = (scenario.avatar_initials || (scenario.sender_name || '?').substring(0, 2)).toUpperCase();
   const avatarColor = scenario.avatar_color || getAvatarColor(scenario.sender_name || scenario.sender_handle || 'slack');
-  const memberCount = scenario.channel_members ? `${scenario.channel_members} members` : '';
+  const isDm = isSlackDm(scenario);
+  const channelLabel = (scenario.channel || '').replace(/^#/, '');
   const senderBadge = scenario.is_bot ? '<span class="slack-sender-badge">APP</span>' : '';
   const verificationBadge = scenario.verified_app ? '<span class="slack-verified-badge">Verified</span>' : '';
   const externalBadge = scenario.external_org ? `<span class="slack-external-badge">${escapeHTML(scenario.external_org)}</span>` : '';
@@ -830,41 +990,80 @@ function renderSlackShell(scenario) {
   const attachmentMarkup = renderSlackAttachment(scenario.attachment || {});
   const reactionsMarkup = renderSlackReactions(scenario.reactions || []);
   const threadFooterMarkup = renderSlackThreadFooter(scenario);
+  const senderName = scenario.sender_name || 'Teammate';
+  const senderHandle = scenario.sender_handle || 'user';
+
+  const topbar = isDm
+    ? `
+      <div class="slack-channel-wrap">
+        <span class="slack-topbar-avatar" style="background:${escapeAttribute(avatarColor)};">${escapeHTML(initials)}</span>
+        <span class="slack-channel">${escapeHTML(senderName)}</span>
+        <span class="slack-presence-dot" title="Active"></span>
+      </div>`
+    : `
+      <div class="slack-channel-wrap">
+        <span class="slack-channel"><span class="slack-hash">#</span>${escapeHTML(channelLabel)}</span>
+        ${scenario.channel_members ? `<span class="slack-channel-meta">${getSlackIconSvg('person')} ${escapeHTML(String(scenario.channel_members))}</span>` : ''}
+      </div>`;
+
+  const channelItems = ['announcements', 'general', 'help-it'];
+  if (!isDm && channelLabel && !channelItems.includes(channelLabel)) {
+    channelItems.splice(2, 0, channelLabel);
+  }
+  const channelListMarkup = channelItems
+    .map(name => {
+      const active = !isDm && name === channelLabel;
+      return `<div class="slack-sidebar-item${active ? ' active' : ''}"><span class="slack-hash">#</span> ${escapeHTML(name)}</div>`;
+    })
+    .join('') + '<div class="slack-sidebar-item unread"><span class="slack-hash">#</span> security <span class="slack-unread-badge">2</span></div>';
+
+  const dmListMarkup = `
+    <div class="slack-sidebar-item${isDm ? ' active' : ''}"><span class="slack-presence-dot"></span> ${escapeHTML(senderName)}</div>
+    <div class="slack-sidebar-item"><span class="slack-presence-dot"></span> Slackbot</div>
+    <div class="slack-sidebar-item"><span class="slack-presence-dot away"></span> you</div>
+  `;
+
+  const composerPlaceholder = isDm ? `Message ${senderName}` : `Message #${channelLabel || 'channel'}`;
+
   return `
     <div class="scenario-view slack-shell">
       <div class="slack-frame">
         <aside class="slack-sidebar" aria-hidden="true">
-          <div class="slack-workspace">${escapeHTML(scenario.workspace || 'Company Workspace')}</div>
+          <div class="slack-workspace">
+            <span>${escapeHTML(scenario.workspace || 'Company Workspace')}</span>
+            <span class="slack-compose-btn">${getSlackIconSvg('compose')}</span>
+          </div>
+          <div class="slack-sidebar-group">
+            <div class="slack-sidebar-item">${getSlackIconSvg('threads')} Threads</div>
+            <div class="slack-sidebar-item">${getSlackIconSvg('drafts')} Drafts &amp; sent</div>
+          </div>
           <div class="slack-sidebar-group">
             <span class="slack-sidebar-title">Channels</span>
-            <div class="slack-sidebar-item"># announcements</div>
-            <div class="slack-sidebar-item active">${escapeHTML(scenario.channel || '#general')}</div>
-            <div class="slack-sidebar-item"># help-it</div>
+            ${channelListMarkup}
           </div>
           <div class="slack-sidebar-group">
             <span class="slack-sidebar-title">Direct messages</span>
-            <div class="slack-sidebar-item">@${escapeHTML(scenario.sender_handle || 'user')}</div>
+            ${dmListMarkup}
           </div>
         </aside>
         <div class="slack-main">
           <div class="slack-topbar">
-            <div class="slack-channel-wrap">
-              <span class="slack-channel">${escapeHTML(scenario.channel || 'Direct message')}</span>
-              ${memberCount ? `<span class="slack-channel-meta">${escapeHTML(memberCount)}</span>` : ''}
-            </div>
-            <div class="slack-top-actions" aria-hidden="true">⌕ ⓘ</div>
+            ${topbar}
+            <div class="slack-top-actions" aria-hidden="true">${getSlackIconSvg('search')}${getSlackIconSvg('info')}</div>
           </div>
+          <div class="slack-day-divider" aria-hidden="true"><span>Today</span></div>
           <div class="slack-message">
+            ${renderSlackHoverBar()}
             <div class="slack-avatar" style="background:${escapeAttribute(avatarColor)};">${escapeHTML(initials)}</div>
             <div class="slack-body">
               <div class="slack-sender-row">
-                <strong>${escapeHTML(scenario.sender_name || 'Teammate')}</strong>
+                <strong>${escapeHTML(senderName)}</strong>
                 ${senderBadge}
                 ${verificationBadge}
                 ${externalBadge}
                 <span class="body-small slack-timestamp">${escapeHTML(scenario.timestamp || '')}</span>
               </div>
-              <div class="body-small slack-handle">@${escapeHTML(scenario.sender_handle || 'user')}</div>
+              <div class="body-small slack-handle">@${escapeHTML(senderHandle)}</div>
               <p class="js-slack-body">${formatSlackBody(scenario.body || '')} ${editedLabel}</p>
               ${attachmentMarkup}
               ${reactionsMarkup}
@@ -872,12 +1071,55 @@ function renderSlackShell(scenario) {
             </div>
           </div>
           <div class="slack-composer" aria-hidden="true">
-            <span>Message ${escapeHTML(scenario.channel || '#channel')}</span>
+            <div class="slack-composer-toolbar">
+              <span class="slack-format-icon"><b>B</b></span>
+              <span class="slack-format-icon"><i>I</i></span>
+              <span class="slack-format-icon"><s>S</s></span>
+              <span class="slack-format-icon slack-format-code">&lt;/&gt;</span>
+            </div>
+            <div class="slack-composer-input">${escapeHTML(composerPlaceholder)}</div>
+            <div class="slack-composer-bottom">
+              <span class="slack-composer-tools">
+                <span class="slack-composer-plus">${getSlackIconSvg('plus')}</span>
+                <span class="slack-format-icon">Aa</span>
+                <span class="slack-format-icon">${getSlackIconSvg('emoji-add')}</span>
+                <span class="slack-format-icon">@</span>
+              </span>
+              <span class="slack-send-btn">${getSlackIconSvg('send')}</span>
+            </div>
           </div>
         </div>
       </div>
     </div>
   `;
+}
+
+function renderQuizBar() {
+  const actionsEl = document.getElementById('quiz-bar-actions');
+  if (!actionsEl) {
+    return;
+  }
+  let actions = '';
+  if (state.stage === 'question' && state.scenarios[state.currentIndex]) {
+    actions = `
+      <button type="button" class="button button-danger quiz-bar-btn" data-answer-choice="phishing">Phishing</button>
+      <button type="button" class="button button-primary quiz-bar-btn" data-answer-choice="legit">Legit</button>
+    `;
+  } else if (state.stage === 'result') {
+    const isLastScenario = state.currentIndex === state.scenarios.length - 1;
+    const nextCtaLabel = state.reviewingFromSummary
+      ? 'Back to Summary'
+      : (isLastScenario ? 'View Final Score' : 'Next Scenario');
+    actions = `
+      <button type="button" class="button button-secondary quiz-bar-btn" id="review-again">Review Scenario</button>
+      <button type="button" class="button button-primary quiz-bar-btn" id="next-scenario">${nextCtaLabel}</button>
+    `;
+  }
+  actionsEl.innerHTML = actions;
+  const bar = document.getElementById('quiz-bar');
+  if (bar) {
+    bar.setAttribute('data-stage', state.stage);
+  }
 }
 
 function renderApp() {
@@ -911,44 +1153,23 @@ function renderApp() {
       markup = renderLoadingCard();
   }
   root.innerHTML = markup;
+  renderQuizBar();
   attachEventHandlers();
   updateHeaderStatus();
+  if (state.scenarios.length && PERSISTED_STAGES.includes(state.stage)) {
+    saveProgress();
+    publishSnapshot();
+  }
   if (state.stage === 'summary') {
     logQuizResult();
   }
 }
 
 function attachEventHandlers() {
-  const homeButton = document.getElementById('header-home');
-  if (homeButton) {
-    homeButton.addEventListener('click', () => {
-      if (!state.scenarios.length) {
-        state.stage = 'loading';
-        renderApp();
-        return;
-      }
-      const reloadedScenarios = state.scenarios.slice();
-      resetQuizWithScenarios(reloadedScenarios);
-      state.profile = { name: '', email: '' };
-      renderApp();
-    });
-  }
-
   const introForm = document.getElementById('quiz-intro-form');
   if (introForm) {
     introForm.addEventListener('submit', event => {
       event.preventDefault();
-      const formData = new FormData(introForm);
-      const nextName = (formData.get('participant-name') || '').toString().trim();
-      const nextEmail = (formData.get('participant-email') || '').toString().trim();
-      const nextValidation = validateProfileInput(nextName, nextEmail);
-      state.profileValidation = nextValidation;
-      state.profile.name = nextName;
-      state.profile.email = nextEmail;
-      if (nextValidation.name || nextValidation.email) {
-        renderApp();
-        return;
-      }
       state.stage = 'question';
       state.currentIndex = 0;
       renderApp();
@@ -1092,7 +1313,6 @@ function handleAnswer(choice) {
       correctAnswer
     };
     state.lastAnswer = { userAnswer: choice, isCorrect };
-    persistQuizResult(buildProgressQuizResultPayload());
     state.stage = 'result';
     renderApp();
   } catch (error) {
@@ -1110,122 +1330,66 @@ function getScore() {
   };
 }
 
-function buildProgressQuizResultPayload() {
-  const total = state.scenarios.length;
-  const answeredEntries = state.answers.filter(Boolean);
-  const answered = answeredEntries.length;
-  const correct = answeredEntries.filter(entry => entry.isCorrect).length;
-  const incorrect = answeredEntries.filter(entry => entry.isCorrect === false).length;
-  const remaining = Math.max(total - answered, 0);
-  const completed = total > 0 && answered === total;
-  const passed = completed && incorrect === 0;
-
-  const scenarios = state.scenarios.map((scenario, index) => {
-    const answer = state.answers[index];
-    return {
-      id: scenario.id,
-      user_answer: answer ? answer.userAnswer : null,
-      expected_answer: scenario.is_phishing ? 'phishing' : 'legit',
-      correct: answer ? answer.isCorrect : null
-    };
-  });
-
-  const correctScenarios = scenarios.filter(item => item.correct === true).map(item => item.id);
-  const incorrectScenarios = scenarios.filter(item => item.correct === false).map(item => item.id);
-  const pendingScenarios = scenarios.filter(item => item.user_answer === null).map(item => item.id);
-
-  let verdict = `Quiz in progress: ${answered}/${total} answered.`;
-  if (completed) {
-    verdict = passed
-      ? 'All answers are correct. Solution is passing.'
-      : 'At least one answer is incorrect. Solution is not passing.';
-  }
-
+function buildSnapshotSubmission() {
   return {
-    total,
-    answered,
-    remaining,
-    correct,
-    incorrect,
-    passed,
-    completion_status: completed ? 'COMPLETED' : 'IN_PROGRESS',
-    checker_result: completed ? (passed ? 'PASS' : 'NOT_PASSING') : 'IN_PROGRESS',
-    incorrect_scenarios: incorrectScenarios,
-    correct_scenarios: correctScenarios,
-    summary: {
-      correct_count: correct,
-      incorrect_count: incorrect,
-      answered_count: answered,
-      pending_count: remaining,
-      correct_scenarios: correctScenarios,
-      incorrect_scenarios: incorrectScenarios,
-      pending_scenarios: pendingScenarios
-    },
-    scenarios,
-    verdict,
-    generated_at: new Date().toISOString()
+    stage: state.stage,
+    profile: { ...state.profile },
+    // Only the raw choice is reported. The server grades it against scenarios.yaml, so the
+    // state an evaluator reads from GET /snapshot never depends on the browser's own scoring.
+    answers: state.scenarios.map((scenario, index) => {
+      const answer = state.answers[index];
+      return {
+        id: scenario.id,
+        answer: answer ? answer.userAnswer : null
+      };
+    })
   };
 }
 
-function buildQuizResultPayload() {
-  return buildProgressQuizResultPayload();
-}
-
-function buildPendingQuizResultPayload(scenarios = state.scenarios) {
-  const total = Array.isArray(scenarios) ? scenarios.length : 0;
-  const scenarioIds = (scenarios || []).map(scenario => scenario.id);
-  return {
-    total,
-    correct: 0,
-    incorrect: total,
-    passed: false,
-    checker_result: 'INCOMPLETE',
-    completion_status: 'NOT_COMPLETED',
-    incorrect_scenarios: [],
-    correct_scenarios: [],
-    summary: {
-      correct_count: 0,
-      incorrect_count: 0,
-      correct_scenarios: [],
-      incorrect_scenarios: [],
-      pending_scenarios: scenarioIds
-    },
-    scenarios: (scenarios || []).map(scenario => ({
-      id: scenario.id,
-      user_answer: null,
-      expected_answer: scenario.is_phishing ? 'phishing' : 'legit',
-      correct: false
-    })),
-    verdict: 'Learner has not completed the quiz yet.',
-    generated_at: new Date().toISOString()
-  };
-}
-
-async function persistQuizResult(payload) {
+async function postSnapshot(submission) {
   try {
-    const response = await fetch('/api/quiz-report', {
+    const response = await fetch('/snapshot', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(submission)
     });
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`Failed to persist quiz report (${response.status}): ${text}`);
+      throw new Error(`Snapshot rejected (${response.status}): ${text}`);
     }
   } catch (error) {
-    console.error('Failed to save quiz report for checker:', error);
+    console.error('Failed to publish quiz snapshot:', error);
   }
+}
+
+function publishSnapshot({ immediate = false } = {}) {
+  if (!state.scenarios.length) {
+    return;
+  }
+  const submission = buildSnapshotSubmission();
+  if (snapshotTimer) {
+    clearTimeout(snapshotTimer);
+    snapshotTimer = null;
+  }
+  if (immediate) {
+    postSnapshot(submission);
+    return;
+  }
+  snapshotTimer = setTimeout(() => {
+    snapshotTimer = null;
+    postSnapshot(submission);
+  }, SNAPSHOT_DEBOUNCE_MS);
 }
 
 function logQuizResult() {
   if (state.hasLoggedSummary) {
     return;
   }
-  const payload = buildQuizResultPayload();
-  console.log('QUIZ_RESULT: ' + JSON.stringify(payload, null, 2));
-  persistQuizResult(payload);
+  const { total, correct } = getScore();
+  console.log(`QUIZ_COMPLETE: ${correct}/${total} correct locally. Graded state: GET /snapshot`);
+  publishSnapshot({ immediate: true });
   state.hasLoggedSummary = true;
 }
 

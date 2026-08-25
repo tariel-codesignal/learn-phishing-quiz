@@ -2,6 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
+const yaml = require('js-yaml');
 
 // Try to load WebSocket module, fallback if not available
 let WebSocket = null;
@@ -17,7 +18,6 @@ try {
 
 const DIST_DIR = path.join(__dirname, 'dist');
 const SCENARIOS_PATH = path.join(__dirname, 'client', 'scenarios.yaml');
-const QUIZ_REPORT_PATH = path.join(__dirname, 'ai-checker-report.json');
 // Check if IS_PRODUCTION is set to true
 const isProduction = process.env.IS_PRODUCTION === 'true';
 // In production mode, dist directory must exist
@@ -29,6 +29,131 @@ const PORT = isProduction ? 3000 : (process.env.PORT || 3000);
 
 // Track connected WebSocket clients
 const wsClients = new Set();
+
+// Latest raw submission pushed by the browser. Held in memory only - quiz state is live
+// session data, so there is no report file on disk to go stale or get committed by accident.
+let latestSubmission = null;
+
+function sendJson(res, statusCode, payload) {
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store'
+  });
+  res.end(JSON.stringify(payload, null, 2));
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', () => {
+      try {
+        resolve(JSON.parse(body));
+      } catch (error) {
+        reject(error);
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+function loadScenarioDefinitions() {
+  const parsed = yaml.load(fs.readFileSync(SCENARIOS_PATH, 'utf8'));
+  if (!Array.isArray(parsed)) {
+    throw new Error('scenarios.yaml must contain a list');
+  }
+  return parsed;
+}
+
+// Grading happens here, against scenarios.yaml, rather than being taken from the browser.
+// The client only ever reports which choice the learner made, so the snapshot an evaluator
+// reads cannot be spoofed by editing client state. Re-derived per request, so editing
+// scenarios.yaml immediately re-grades whatever the learner has already answered.
+function buildSnapshot() {
+  const scenarios = loadScenarioDefinitions();
+
+  const submitted = new Map();
+  if (latestSubmission) {
+    latestSubmission.answers.forEach(entry => {
+      if (entry && typeof entry.id === 'string') {
+        submitted.set(entry.id, entry.answer);
+      }
+    });
+  }
+
+  const results = scenarios.map(scenario => {
+    const expected = scenario.is_phishing ? 'phishing' : 'legit';
+    const answer = submitted.get(scenario.id);
+    const answered = answer === 'phishing' || answer === 'legit';
+    return {
+      id: scenario.id,
+      interface: scenario.interface || null,
+      expected_answer: expected,
+      user_answer: answered ? answer : null,
+      correct: answered ? answer === expected : null
+    };
+  });
+
+  const total = results.length;
+  const answered = results.filter(result => result.user_answer !== null).length;
+  const correct = results.filter(result => result.correct === true).length;
+  const incorrect = results.filter(result => result.correct === false).length;
+  const completed = total > 0 && answered === total;
+  const passed = completed && incorrect === 0;
+
+  let status = 'not_started';
+  if (completed) {
+    status = 'completed';
+  } else if (answered > 0) {
+    status = 'in_progress';
+  }
+
+  let verdict = 'Learner has not started the quiz.';
+  if (passed) {
+    verdict = 'All answers are correct. Solution is passing.';
+  } else if (completed) {
+    verdict = `${incorrect} of ${total} answers are incorrect. Solution is not passing.`;
+  } else if (answered > 0) {
+    verdict = `Quiz in progress: ${answered} of ${total} answered.`;
+  }
+
+  return {
+    version: 1,
+    source: latestSubmission ? 'client' : 'server',
+    status,
+    passed,
+    verdict,
+    total,
+    answered,
+    remaining: total - answered,
+    correct,
+    incorrect,
+    score: total ? Number((correct / total).toFixed(4)) : 0,
+    profile: latestSubmission ? latestSubmission.profile : null,
+    scenarios: results,
+    updated_at: latestSubmission ? latestSubmission.updatedAt : null
+  };
+}
+
+async function handleSnapshotPost(req, res) {
+  try {
+    const data = await readJsonBody(req);
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      sendJson(res, 400, { error: 'A snapshot object is required' });
+      return;
+    }
+    latestSubmission = {
+      answers: Array.isArray(data.answers) ? data.answers : [],
+      profile: data.profile && typeof data.profile === 'object' ? data.profile : null,
+      stage: typeof data.stage === 'string' ? data.stage : null,
+      updatedAt: new Date().toISOString()
+    };
+    sendJson(res, 200, { ok: true, snapshot: buildSnapshot() });
+  } catch (error) {
+    console.error('Failed to accept snapshot:', error);
+    sendJson(res, 400, { error: 'Invalid JSON payload for snapshot' });
+  }
+}
 
 // MIME types for different file extensions
 const mimeTypes = {
@@ -114,34 +239,8 @@ function handlePostRequest(req, res, parsedUrl) {
         res.end(JSON.stringify({ error: 'Invalid JSON' }));
       }
     });
-  } else if (parsedUrl.pathname === '/api/quiz-report') {
-    let body = '';
-
-    req.on('data', chunk => {
-      body += chunk.toString();
-    });
-
-    req.on('end', () => {
-      try {
-        const payload = JSON.parse(body);
-        const requiredFields = ['total', 'correct', 'incorrect', 'passed', 'checker_result', 'scenarios', 'verdict'];
-        const missingFields = requiredFields.filter(field => !(field in payload));
-
-        if (missingFields.length > 0) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: `Missing required fields: ${missingFields.join(', ')}` }));
-          return;
-        }
-
-        fs.writeFileSync(QUIZ_REPORT_PATH, JSON.stringify(payload, null, 2), 'utf8');
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, path: path.basename(QUIZ_REPORT_PATH) }));
-      } catch (error) {
-        console.error('Failed to save quiz report:', error);
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Invalid JSON payload for quiz report' }));
-      }
-    });
+  } else if (parsedUrl.pathname === '/snapshot') {
+    handleSnapshotPost(req, res);
   } else {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('Not found');
@@ -156,6 +255,17 @@ const server = http.createServer((req, res) => {
   // Handle POST requests
   if (req.method === 'POST') {
     handlePostRequest(req, res, parsedUrl);
+    return;
+  }
+
+  // The single endpoint an evaluator reads to get the graded state of the quiz.
+  if (req.method === 'GET' && parsedUrl.pathname === '/snapshot') {
+    try {
+      sendJson(res, 200, buildSnapshot());
+    } catch (error) {
+      console.error('Failed to build snapshot:', error);
+      sendJson(res, 500, { error: 'Failed to build snapshot' });
+    }
     return;
   }
 
@@ -227,6 +337,7 @@ if (isWebSocketAvailable) {
 // Start server
 server.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`Quiz state for evaluation: GET http://localhost:${PORT}/snapshot`);
   if (isProduction) {
     console.log(`Serving static files from: ${DIST_DIR}`);
   } else {

@@ -1,5 +1,6 @@
 - id: vendor-invoice-payment-change-request
   interface: email
+  intro: "You handle vendor payments. A follow-up about an open invoice says the vendor's bank details changed and payment should go to the new account today."
   sender_name: "Alicia Grant | NorthBridge Supplies"
   sender_email: "alicia.grant@northbridgesupplies-billing.com"
   subject: "RE: April invoice payment — updated remittance details"
@@ -38,6 +39,7 @@
 
 - id: email-credentials-reset
   interface: email
+  intro: "An IT security notice says your password expires within the hour and gives you a link to keep your account active."
   sender_name: Alex @ IT Support
   sender_email: service-security@corp-it-support.com
   subject: Immediate credential reset required
@@ -68,6 +70,7 @@
 
 - id: email-quarterly-update
   interface: email
+  intro: "A teammate shares the Q2 roadmap notes ahead of tomorrow's planning sync."
   sender_name: Priya Raman
   sender_email: priya.raman@company.com
   subject: Q2 product roadmap notes
@@ -99,6 +102,7 @@
 
 - id: sms-package-fee
   interface: sms
+  intro: "A text says a package addressed to you is on hold and asks for a small redelivery fee to release it."
   sender_name: USPS Notice
   sender_number: "+1 (510) 224-9081"
   carrier: Text Message
@@ -116,6 +120,7 @@
 
 - id: sms-calendar-reminder
   interface: sms
+  intro: "A reminder that annual benefits enrollment closes soon, pointing you to the company portal."
   sender_name: HR Bot
   sender_number: "HR-Notify"
   carrier: iMessage
@@ -132,8 +137,9 @@
 
 - id: slack-expense-warning
   interface: slack
+  intro: "A finance bot pings you about unmatched expenses on your card and asks you to download a CSV within the hour."
   workspace: Company HQ
-  channel: #finance-alerts
+  channel: "#finance-alerts"
   channel_members: 148
   sender_name: Finance Automation
   sender_handle: finance-bot
@@ -169,8 +175,9 @@
 
 - id: slack-incident-report
   interface: slack
+  intro: "Nina from SecOps follows up on the login weirdness you flagged earlier today."
   workspace: Company HQ
-  channel: Direct message with SecOps
+  channel: Direct message
   channel_members: 2
   sender_name: Nina Lopez
   sender_handle: nina.lopez
